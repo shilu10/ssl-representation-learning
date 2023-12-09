@@ -3,7 +3,7 @@ from tensorflow import keras
 import tensorflow_datasets as tfds
 
 
-def prepare_dataset(dataset_name="stl10"):
+def prepare_dataset(dataset_name="stl10", steps_per_epoch=200):
     unlabeled_batch_size = unlabelled_images // steps_per_epoch
     labeled_batch_size = labelled_train_images // steps_per_epoch
     batch_size = unlabeled_batch_size + labeled_batch_size
@@ -31,5 +31,3 @@ def prepare_dataset(dataset_name="stl10"):
 
     return batch_size, train_dataset, labeled_train_dataset, test_dataset
 
-
-batch_size, train_dataset, labeled_train_dataset, test_dataset = prepare_dataset()
