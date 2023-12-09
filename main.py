@@ -25,7 +25,8 @@ def get_args():
     parser.add_argument('--width', type=int, default=128)
     parser.add_argument('--use_resnet', type=bool, default=False)
     parser.add_argument('--tensorboard_dir', type=str, default='./logs')
-    parser.add_argument('--checkpoint_filepath', type=str, default='./tmp/ckpt/checkpoint.model.keras')
+    parser.add_argument('--checkpoint_filepath', type=str, default='./tmp/ckpt/model.h5')
+    parser.add_argument('--model_type', type=str, default='simclr')
 
     return parser.parse_args()
 
@@ -145,7 +146,8 @@ def main(args):
         save_best_only=True
     )
 
-    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir, update_freq=1)
+    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir + args.model_type, 
+                                                update_freq=1)
 
     model = SimCLR(
         encoder = encoder,
