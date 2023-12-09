@@ -1,6 +1,7 @@
 # https://keras.io/examples/vision/nnclr/
 from tensorflow import keras 
 import tensorflow as tf 
+import tensorflow.keras.backend as K
 
 
 '''Contrastive accuracy: self-supervised metric, the ratio of cases in which the representation of an image is more similar to its differently augmented version's one, than to the representation of any other image in the current batch. Self-supervised metrics can be used for hyperparameter tuning even in the case when there are no labeled examples.
@@ -144,12 +145,19 @@ class SimCLR(tf.keras.models.Model):
 
 class MoCo(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
-    def __init__(self, m=0.1, queue_len=128):
+    def __init__(self, encoder, projection_head,
+         contrastive_augmenter, classification_augmenter, 
+         linear_probe, m=0.1, queue_len=128, **kwargs):
+
         super(MoCo, self).__init__(dynamic=True)
         self.m = m
         self.queue_len = queue_len
 
+        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
+
         self.encoder = encoder 
+        feature_dimensions = encoder.output_shape[1]
+        self.queue = tf.zeros((1, feature_dimensions))
         self.projection_head = projection_head 
         self.contrastive_augmenter = contrastive_augmenter 
         self.classification_augmenter = classification_augmenter
@@ -169,8 +177,11 @@ class MoCo(tf.keras.models.Model):
         
         self.m_encoder.set_weights(self.encoder.get_weights())
 
-        for layer in self.k_enc.layers:
-            layer.trainable = False        
+        #for layer in self.m_encoder.layers:
+         #   layer.trainable = False  
+
+        #for layer in self.m_projection_head.layers:
+         #   layer.trainable = False        
     
     def queue_them(self, k):
         if self.queue == None:
@@ -237,11 +248,16 @@ class MoCo(tf.keras.models.Model):
         X = tf.concat([unlabeled_X, labeled_X], axis=0)
         x_q = self.contrastive_augmenter(X) 
         x_k = self.contrastive_augmenter(X)
-
+        
+        q_temp = None
+        k_temp = None
         with tf.GradientTape() as tape:
             # embedding representation
             q = self.encoder(x_q)
             k = self.m_encoder(x_k)
+
+            q_temp = q
+            k_temp = k 
 
             q = self.projection_head(q)
             k = self.m_projection_head(k)
@@ -249,9 +265,9 @@ class MoCo(tf.keras.models.Model):
             q = tf.reshape(q, (tf.shape(q)[0], 1, -1))
             k = tf.reshape(k, (tf.shape(k)[0], -1, 1))
 
-            contrastive_loss = self.contrastive_loss(q, k, self.queue)
+            contrastive_loss = self.con_loss(q, k, self.queue)
 
-            self.queue_them(tf.squeeze(k))
+        self.queue_them(tf.squeeze(k))
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
@@ -264,8 +280,8 @@ class MoCo(tf.keras.models.Model):
             )
         )
 
-        self.update_contrastive_accuracy(hi, hj)
-        self.update_correlation_accuracy(hi, hj)
+        self.update_contrastive_accuracy(q_temp, k_temp)
+        self.update_correlation_accuracy(q_temp, k_temp)
 
         # probe layer
         preprocessed_images = self.classification_augmenter(labeled_X)
@@ -297,8 +313,8 @@ class MoCo(tf.keras.models.Model):
             "c_loss": contrastive_loss,
             "c_acc": self.contrastive_accuracy.result(),
             "r_acc": self.correlation_accuracy.result(),
-            "p_loss": probe_loss,
-            "p_acc": self.probe_accuracy.result(),
+        #    "p_loss": probe_loss,
+         #   "p_acc": self.probe_accuracy.result(),
         }
 
     def test_step(self, inputs):
@@ -315,4 +331,19 @@ class MoCo(tf.keras.models.Model):
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
 
     def save_weights(self, epoch=0, loss=None):
-        self.encoder.save_weights(f"simclr_weights_epoch_{epoch}_loss_{loss}.h5")
+        self.encoder.save(f"simclr_weights_epoch_{epoch}_loss_{loss}", save_format="tf")
+
+    def con_loss(self, q, k, queue):
+        l_pos = tf.squeeze(tf.matmul(q, k), axis=-1)
+        l_neg = tf.matmul(tf.squeeze(q), tf.transpose(queue))
+        # logits = softmax(tf.concat([l_pos, l_neg], axis=1))
+        logits = tf.concat([l_pos, l_neg], axis=1)
+        ###### keras-fashion version ######
+        # return logits
+        ###### gradient-tape version ###### 
+        labels = tf.zeros(tf.shape(q)[0])
+        loss = K.mean(self.criterion(labels, logits))
+        l2 = tf.reduce_mean(tf.math.l2_normalize(q))
+        # print(K.max(logits, axis=1).numpy())
+        hits = tf.equal(tf.argmax(logits, axis=1), tf.cast(labels, 'int64'))
+        return loss + 0.1 * l2

@@ -10,7 +10,7 @@ from tensorflow.keras.layers.experimental import preprocessing
 from dataloader import prepare_dataset
 from augmentations import RandomResizedCrop, RandomColorJitter
 from models import SimCLR, MoCo
-from losses import NTXent
+from losses import NTXent, InfoNCE
 from backbone import ResNet50
 
 
@@ -146,7 +146,7 @@ def main(args):
         save_best_only=True
     )
 
-    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir + args.model_type, 
+    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir + '/' + args.model_type, 
                                                 update_freq=1)
 
     if args.model_type == 'simclr':
@@ -159,6 +159,7 @@ def main(args):
         )
 
     elif args.model_type == "moco":
+        contrastive_loss = InfoNCE()
         model = MoCo(
             encoder = encoder,
             projection_head = projection_head,
@@ -176,7 +177,7 @@ def main(args):
     history = model.fit(train_dataset, 
                         epochs=args.num_epochs, 
                         validation_data=test_dataset, 
-                        callbacks=[model_checkpoint_callback, tb_callback])
+                        callbacks=[tb_callback])
 
     model.encoder.save('simclr_encoder')
 
