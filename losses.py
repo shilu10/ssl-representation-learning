@@ -26,24 +26,25 @@ class NTXent(tf.keras.losses.Loss):
         super(NTXent, self).__init__(**kwargs)
         self.cosine_sim = tf.keras.losses.CosineSimilarity(axis=-1, reduction=tf.keras.losses.Reduction.NONE)
         self.criterion = tf.keras.losses.CategoricalCrossentropy(from_logits=True) 
+        self.tau = tau
 
     def call(self, zi, zj):
         z = tf.cast(tf.concat([zi, zj], 0), dtype=tf.float32)
         loss = 0 
 
-        for k in range(zi.shape(0)):
+        for k in range(zi.shape[0]):
             # Numerator (compare i,j & j,i)
             i = k
             j = k + zi.shape[0]
 
             sim = tf.squeeze(- self.cosine_sim(tf.reshape(z[i], (1, -1)), tf.reshape(z[j], (1, -1))))
-            numerator = tf.math.exp(sim / tau)
+            numerator = tf.math.exp(sim / self.tau)
 
             # Denominator (compare i & j to all samples apart from themselves)
             sim_ik = - self.cosine_sim(tf.reshape(z[i], (1, -1)), z[tf.range(z.shape[0]) != i])
             sim_jk = - self.cosine_sim(tf.reshape(z[j], (1, -1)), z[tf.range(z.shape[0]) != j])
-            denominator_ik = tf.reduce_sum(tf.math.exp(sim_ik / tau))
-            denominator_jk = tf.reduce_sum(tf.math.exp(sim_jk / tau))
+            denominator_ik = tf.reduce_sum(tf.math.exp(sim_ik / self.tau))
+            denominator_jk = tf.reduce_sum(tf.math.exp(sim_jk / self.tau))
 
             # Calculate individual and combined losses
             loss_ij = - tf.math.log(numerator / denominator_ik)

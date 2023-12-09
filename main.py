@@ -4,10 +4,10 @@ import os, sys, shutil
 import numpy as np 
 from argparse import ArgumentParser
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # suppress info-level logs
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # suppress info-level logs 
 from tensorflow.keras.layers.experimental import preprocessing
 
-from dataloder import prepare_dataset
+from dataloader import prepare_dataset
 from augmentations import RandomResizedCrop, RandomColorJitter
 from models import SimCLR
 from losses import NTXent
@@ -18,9 +18,9 @@ tf.get_logger().setLevel("WARN")  # suppress info-level logs
 def get_args():
     parser = ArgumentParser()
 
-    parser.add_argument('--num_epochs', default=30) 
-    parser.add_argument('--steps_per_epoch', default=200)
-    parser.add_argument('--width', default=128)
+    parser.add_argument('--num_epochs', type=int, default=30) 
+    parser.add_argument('--steps_per_epoch', type=int, default=200)
+    parser.add_argument('--width', type=int, default=128)
 
     return parser.parse_args()
 

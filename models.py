@@ -11,7 +11,7 @@ class SimCLR(tf.keras.models.Model):
     
     def __init__(self, encoder, projection_head,
          contrastive_augmenter, classification_augmenter, linear_probe, **kwargs):
-        super(SimCLR, self).__init__(**kwargs):
+        super(SimCLR, self).__init__(**kwargs)
         self.encoder = encoder 
         self.projection_head = projection_head 
         self.contrastive_augmenter = contrastive_augmenter 
@@ -28,7 +28,7 @@ class SimCLR(tf.keras.models.Model):
          
     def compile(self, contrastive_optimizer,
                  probe_optimizer, contrastive_loss, **kwargs):
-
+        super().compile(**kwargs)
         self.probe_optimizer = probe_optimizer
         self.contrastive_optimizer = contrastive_optimizer
         self.contrastive_loss = contrastive_loss
@@ -75,10 +75,10 @@ class SimCLR(tf.keras.models.Model):
         (unlabeled_X, _), (labeled_X, labeled_y) = inputs
         # combining both labeled and unlabeled images
         X = tf.concat([unlabeled_X, labeled_X], axis=0)
-        xi = self.contrastive_augmentor(X) 
-        xj = self.contrastive_augmentor(X)
+        xi = self.contrastive_augmenter(X) 
+        xj = self.contrastive_augmenter(X)
 
-        with tf.GradientTape() s tape:
+        with tf.GradientTape() as tape:
             # embedding representation
             hi = self.encoder(xi)
             hj = self.encoder(xj)
@@ -89,8 +89,7 @@ class SimCLR(tf.keras.models.Model):
 
             contrastive_loss = self.contrastive_loss(zi, zj)
 
-        encoder_params, proj_head_params = self.encoder.trainable_weights, //
-                                             self.projection_head.trainable_weights
+        encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
         grads = tape.gradient(contrastive_loss, encoder_params + proj_head_params)
 
@@ -109,12 +108,12 @@ class SimCLR(tf.keras.models.Model):
         with tf.GradientTape() as tape:
             features = self.encoder(preprocessed_images)
             class_logits = self.linear_probe(features)
-            probe_loss = self.probe_loss(labels, class_logits)
+            probe_loss = self.probe_loss(labeled_y, class_logits)
         gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
         self.probe_optimizer.apply_gradients(
             zip(gradients, self.linear_probe.trainable_weights)
         )
-        self.probe_accuracy.update_state(labels, class_logits)
+        self.probe_accuracy.update_state(labeled_y, class_logits)
 
         return {
             "c_loss": contrastive_loss,
@@ -125,7 +124,7 @@ class SimCLR(tf.keras.models.Model):
         }
 
     def test_step(self, inputs):
-        labeled_images, labels = data
+        labeled_images, labels = inputs
 
         preprocessed_images = self.classification_augmenter(
             labeled_images, training=False
