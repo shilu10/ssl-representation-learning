@@ -2,6 +2,7 @@ from tensorflow import keras
 import tensorflow as tf 
 import numpy as np 
 import os,sys,shutil 
+import tensorflow.keras.backend as K
 
 
 class NTXent(tf.keras.losses.Loss):
@@ -76,10 +77,10 @@ class InfoNCE(tf.keras.losses.Loss):
             Returns:
                 loss: The complete NT_Xent constrastive loss
         """
-        super(NTXent, self).__init__(**kwargs)
+        super(InfoNCE, self).__init__(**kwargs)
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
 
-    def call(self, q, k, queue):
+    def __call__(self, q, k, queue):
         l_pos = tf.squeeze(tf.matmul(q, k), axis=-1)
         l_neg = tf.matmul(tf.squeeze(q), tf.transpose(queue))
         # logits = softmax(tf.concat([l_pos, l_neg], axis=1))
@@ -87,8 +88,8 @@ class InfoNCE(tf.keras.losses.Loss):
         ###### keras-fashion version ######
         # return logits
         ###### gradient-tape version ###### 
-        labels = tf.zeros(tf.shape(inputs)[0])
-        loss = K.mean(self.criterion(label, logits))
+        labels = tf.zeros(tf.shape(q)[0])
+        loss = K.mean(self.criterion(labels, logits))
         l2 = tf.reduce_mean(tf.math.l2_normalize(q))
         # print(K.max(logits, axis=1).numpy())
         hits = tf.equal(tf.argmax(logits, axis=1), tf.cast(labels, 'int64'))
