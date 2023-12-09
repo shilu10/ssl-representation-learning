@@ -170,31 +170,7 @@ class MoCo(tf.keras.models.Model):
         self.m_encoder.set_weights(self.encoder.get_weights())
 
         for layer in self.k_enc.layers:
-            layer.trainable = False
-        
-    def call(self, inputs):
-        # update key extractor weights
-        k_weights = [self.m*w_k + (1-self.m)*w_q for w_k, w_q \
-                     in zip(self.k_enc.get_weights(), self.q_enc.get_weights())]
-        self.k_enc.set_weights(k_weights)
-        # get two versions of same batch data
-        x_q, x_k = self.rand_aug(inputs)
-        
-        # save the key and query
-        # sample_q = tf.io.encode_jpeg(tf.cast(x_q[0]*255, tf.uint8))
-        # ts = ''.join(map(str, list(time.localtime())))
-        # tf.io.write_file(f'{ts}_sample_q.jpeg', sample_q)
-        # sample_k = tf.io.encode_jpeg(tf.cast(x_k[0]*255, tf.uint8))
-        # tf.io.write_file(f'{ts}_sample_k.jpeg', sample_k)
-
-        # forward
-        q = self.g(self.q_enc(x_q))
-        q = tf.reshape(q, (tf.shape(q)[0], 1, -1))
-        k = self.g(self.k_enc(x_k))
-        k = tf.reshape(k, (tf.shape(k)[0], -1, 1))
-
-
-        
+            layer.trainable = False        
     
     def queue_them(self, k):
         if self.queue == None:
@@ -205,51 +181,6 @@ class MoCo(tf.keras.models.Model):
             self.queue = tf.concat([self.queue, k], axis=0)
         else:
             self.queue = tf.concat([self.queue, k], axis=0)
-    
-    def rand_aug(self, batch, 
-                 resize_min=1, 
-                 resize_max=2, 
-                 jitter_delta=0.5):
-        batch_shape = tf.shape(batch)
-        # random reszie
-        img_size = batch_shape[1:-1].numpy()
-        resize_delta = tf.random.uniform([2, 1], resize_min, resize_max).numpy()
-                            
-        x_k = tf.image.resize(batch, size=img_size*resize_delta[0])
-        x_q = tf.image.resize(batch, size=img_size*resize_delta[1])
-        # random crop
-        crop_size = (*batch_shape.numpy()[:1], *self.img_shape)
-        x_k = tf.image.random_crop(x_k, size=crop_size)
-        x_q = tf.image.random_crop(x_q, size=crop_size)
-        # random jitter
-        x_k = tf.image.random_brightness(x_k, jitter_delta)
-        x_k = tf.image.random_contrast(x_k, 1-jitter_delta, 1+jitter_delta)
-        x_k = tf.image.random_saturation(x_k, 1-jitter_delta, 1+jitter_delta)
-        x_q = tf.image.random_brightness(x_q, jitter_delta)
-        x_q = tf.image.random_contrast(x_q, 1-jitter_delta, 1+jitter_delta)
-        x_q = tf.image.random_saturation(x_q, 1-jitter_delta, 1+jitter_delta)
-        # random horizontal flip
-        x_k = tf.image.random_flip_left_right(x_k)
-        x_q = tf.image.random_flip_left_right(x_q)
-        # random grayscale
-        grayscale_or_not = tf.random.uniform([2])
-        if grayscale_or_not[0] > 0.5:
-            x_k = tf.tile(tf.image.rgb_to_grayscale(x_k), (1, 1, 1, 3))
-        if grayscale_or_not[1] > 0.5:
-            x_q = tf.tile(tf.image.rgb_to_grayscale(x_q), (1, 1, 1, 3))
-        return K.clip(x_k, 0, 255) / 255, K.clip(x_q, 0, 255) / 255
-    
-    def compute_output_shape(self, input_shape):
-        ###### keras-fashion version ######
-        # return (input_shape[0], self.queue_len+1)
-        ###### gradient-tape version ###### 
-        return (1)
-    
-    def compute_output_shape(self, input_shape):
-        ###### keras-fashion version ######
-        # return (input_shape[0], self.queue_len+1)
-        ###### gradient-tape version ###### 
-        return (1)
 
     def save_weights(self, epoch=0, loss=None):
         self.q_enc.save_weights(f"moco_weights_epoch_{epoch}_loss_{loss}.h5")
@@ -304,19 +235,23 @@ class MoCo(tf.keras.models.Model):
         (unlabeled_X, _), (labeled_X, labeled_y) = inputs
         # combining both labeled and unlabeled images
         X = tf.concat([unlabeled_X, labeled_X], axis=0)
-        xi = self.contrastive_augmenter(X) 
-        xj = self.contrastive_augmenter(X)
+        x_q = self.contrastive_augmenter(X) 
+        x_k = self.contrastive_augmenter(X)
 
         with tf.GradientTape() as tape:
             # embedding representation
-            hi = self.encoder(xi)
-            hj = self.encoder(xj)
+            q = self.encoder(x_q)
+            k = self.m_encoder(x_k)
 
-            # the representations are passed through a projection mlp
-            zi = self.projection_head(hi)
-            zj = self.projection_head(hj)
+            q = self.projection_head(q)
+            k = self.m_projection_head(k)
 
-            contrastive_loss = self.contrastive_loss(zi, zj)
+            q = tf.reshape(q, (tf.shape(q)[0], 1, -1))
+            k = tf.reshape(k, (tf.shape(k)[0], -1, 1))
+
+            contrastive_loss = self.contrastive_loss(q, k, self.queue)
+
+            self.queue_them(tf.squeeze(k))
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
@@ -344,6 +279,19 @@ class MoCo(tf.keras.models.Model):
             zip(gradients, self.linear_probe.trainable_weights)
         )
         self.probe_accuracy.update_state(labeled_y, class_logits)
+
+
+        # the momentum networks are updated by exponential moving average
+        for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
+            m_weight.assign(
+                self.m * m_weight + (1 - self.m) * weight
+            )
+        for weight, m_weight in zip(
+            self.projection_head.weights, self.m_projection_head.weights
+        ):
+            m_weight.assign(
+                self.m * m_weight + (1 - self.m) * weight
+            )
 
         return {
             "c_loss": contrastive_loss,
