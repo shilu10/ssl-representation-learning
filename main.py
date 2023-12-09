@@ -24,6 +24,8 @@ def get_args():
     parser.add_argument('--steps_per_epoch', type=int, default=200)
     parser.add_argument('--width', type=int, default=128)
     parser.add_argument('--use_resnet', type=bool, default=False)
+    parser.add_argument('--tensorboard_dir', type=str, default='./logs')
+    parser.add_argument('--checkpoint_filepath', type=str, default='./tmp/ckpt/checkpoint.model.keras')
 
     return parser.parse_args()
 
@@ -40,6 +42,11 @@ def main(args):
                 preprocessing.Rescaling(1 / 255),
                 preprocessing.RandomFlip("horizontal"),
                 RandomResizedCrop(scale=(0.2, 1.0), ratio=(3 / 4, 4 / 3)),
+                tf.keras.layers.Resizing(
+                        224,
+                        224,
+                        interpolation='bilinear',
+                    ),
                 RandomColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
             ],
             name="contrastive_augmenter",
@@ -50,7 +57,13 @@ def main(args):
                 tf.keras.layers.Input(shape=(96, 96, 3)),
                 preprocessing.Rescaling(1 / 255),
                 preprocessing.RandomFlip("horizontal"),
+                
                 RandomResizedCrop(scale=(0.5, 1.0), ratio=(3 / 4, 4 / 3)),
+                tf.keras.layers.Resizing(
+                        224,
+                        224,
+                        interpolation='bilinear',
+                    ),
                 RandomColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
             ],
             name="classification_augmenter",
@@ -71,8 +84,10 @@ def main(args):
 
     if args.use_resnet:
         encoder = ResNet50(
+            data_format="channels_last",
             trainable = True,
             include_top = False,
+            pooling='avg'
         )
 
     projection_head = tf.keras.Sequential(
@@ -97,15 +112,15 @@ def main(args):
 
     contrastive_loss = NTXent()
 
-    checkpoint_filepath = '/tmp/ckpt/checkpoint.model.keras'
+    checkpoint_filepath = args.checkpoint_filepath
     model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_filepath,
-        monitor='val_accuracy',
-        mode='max',
+        monitor='c_loss',
+        mode='min',
         save_best_only=True
     )
 
-    tb_callback = tf.keras.callbacks.TensorBoard('./logs', update_freq=1)
+    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir, update_freq=1)
 
     model = SimCLR(
         encoder = encoder,
