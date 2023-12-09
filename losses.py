@@ -55,3 +55,41 @@ class NTXent(tf.keras.losses.Loss):
         loss /= z.shape[0]
 
         return loss 
+
+
+class InfoNCE(tf.keras.losses.Loss):
+    """ Normalized temperature-scaled CrossEntropy loss [1]
+        [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
+    """
+    def __init__(self, **kwargs):
+        """ 
+            Calculates the contrastive loss of the input data using NT_Xent. The
+            equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
+            (This is the Tensorflow implementation of the standard numpy version found
+            in the NT_Xent function).
+            
+            Args:
+                zi: One half of the input data, shape = (batch_size, feature_1, feature_2, ..., feature_N)
+                zj: Other half of the input data, must have the same shape as zi
+                tau: Temperature parameter (a constant), default = 1.
+
+            Returns:
+                loss: The complete NT_Xent constrastive loss
+        """
+        super(NTXent, self).__init__(**kwargs)
+        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
+
+    def call(self, q, k, queue):
+        l_pos = tf.squeeze(tf.matmul(q, k), axis=-1)
+        l_neg = tf.matmul(tf.squeeze(q), tf.transpose(queue))
+        # logits = softmax(tf.concat([l_pos, l_neg], axis=1))
+        logits = tf.concat([l_pos, l_neg], axis=1)
+        ###### keras-fashion version ######
+        # return logits
+        ###### gradient-tape version ###### 
+        labels = tf.zeros(tf.shape(inputs)[0])
+        loss = K.mean(self.criterion(label, logits))
+        l2 = tf.reduce_mean(tf.math.l2_normalize(q))
+        # print(K.max(logits, axis=1).numpy())
+        hits = tf.equal(tf.argmax(logits, axis=1), tf.cast(labels, 'int64'))
+        return loss + 0.1 * l2
