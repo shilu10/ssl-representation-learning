@@ -9,7 +9,7 @@ from tensorflow.keras.layers.experimental import preprocessing
 
 from dataloader import prepare_dataset
 from augmentations import RandomResizedCrop, RandomColorJitter
-from models import SimCLR
+from models import SimCLR, MoCo
 from losses import NTXent
 from backbone import ResNet50
 
@@ -149,13 +149,23 @@ def main(args):
     tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir + args.model_type, 
                                                 update_freq=1)
 
-    model = SimCLR(
-        encoder = encoder,
-        projection_head = projection_head,
-        contrastive_augmenter = contrastive_augmenter,
-        classification_augmenter = classification_augmenter,
-        linear_probe = linear_probe
-    )
+    if args.model_type == 'simclr':
+        model = SimCLR(
+            encoder = encoder,
+            projection_head = projection_head,
+            contrastive_augmenter = contrastive_augmenter,
+            classification_augmenter = classification_augmenter,
+            linear_probe = linear_probe
+        )
+
+    elif args.model_type == "moco":
+        model = MoCo(
+            encoder = encoder,
+            projection_head = projection_head,
+            contrastive_augmenter = contrastive_augmenter,
+            classification_augmenter = classification_augmenter,
+            linear_probe = linear_probe
+        )
 
     model.compile(
         contrastive_optimizer=contrastive_optimizer, 
