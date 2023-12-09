@@ -11,6 +11,8 @@ from dataloader import prepare_dataset
 from augmentations import RandomResizedCrop, RandomColorJitter
 from models import SimCLR
 from losses import NTXent
+from backbone import ResNet50
+
 
 tf.get_logger().setLevel("WARN")  # suppress info-level logs
 
@@ -21,6 +23,7 @@ def get_args():
     parser.add_argument('--num_epochs', type=int, default=30) 
     parser.add_argument('--steps_per_epoch', type=int, default=200)
     parser.add_argument('--width', type=int, default=128)
+    parser.add_argument('--use_resnet', type=bool, default=False)
 
     return parser.parse_args()
 
@@ -66,6 +69,12 @@ def main(args):
             name="encoder",
         )
 
+    if args.use_resnet:
+        encoder = ResNet50(
+            trainable = True,
+            include_top = False,
+        )
+
     projection_head = tf.keras.Sequential(
             [
                 tf.keras.layers.Input(shape=(args.width,)),
@@ -88,6 +97,16 @@ def main(args):
 
     contrastive_loss = NTXent()
 
+    checkpoint_filepath = '/tmp/ckpt/checkpoint.model.keras'
+    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=checkpoint_filepath,
+        monitor='val_accuracy',
+        mode='max',
+        save_best_only=True
+    )
+
+    tb_callback = tf.keras.callbacks.TensorBoard('./logs', update_freq=1)
+
     model = SimCLR(
         encoder = encoder,
         projection_head = projection_head,
@@ -102,7 +121,12 @@ def main(args):
         contrastive_loss = contrastive_loss,
     )
 
-    history = model.fit(train_dataset, epochs=args.num_epochs, validation_data=test_dataset)
+    history = model.fit(train_dataset, 
+                        epochs=args.num_epochs, 
+                        validation_data=test_dataset, 
+                        callbacks=[model_checkpoint_callback, tb_callback])
+
+    model.encoder.save('simclr_encoder')
 
 
 if __name__ == '__main__':
