@@ -143,7 +143,8 @@ def main(args):
         filepath=checkpoint_filepath,
         monitor='c_loss',
         mode='min',
-        save_best_only=True
+        save_best_only=True,
+        # save_weights
     )
 
     tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir + '/' + args.model_type, 
