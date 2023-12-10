@@ -150,6 +150,7 @@ class MoCo(tf.keras.models.Model):
          linear_probe, m=0.1, queue_len=128, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
+        hvd.init()
         self.m = m
         self.queue_len = queue_len
 
@@ -226,7 +227,7 @@ class MoCo(tf.keras.models.Model):
         all_key_feat = allgather(key_feat, "batch_unshuffle_feature")  # gn x c
         return tf.gather(all_key_feat, my_idxs)
         
-     def push_queue(self, queue, queue_ptr, item):
+    def push_queue(self, queue, queue_ptr, item):
         # queue: KxC
         # item: NxC
         item = allgather(item, 'queue_gather')  # GN x C
