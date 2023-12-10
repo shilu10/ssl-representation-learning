@@ -2,7 +2,7 @@
 from tensorflow import keras 
 import tensorflow as tf 
 import tensorflow.keras.backend as K
-import horovod.tensorflow as hvd
+
 
 '''Contrastive accuracy: self-supervised metric, the ratio of cases in which the representation of an image is more similar to its differently augmented version's one, than to the representation of any other image in the current batch. Self-supervised metrics can be used for hyperparameter tuning even in the case when there are no labeled examples.
 Linear probing accuracy: linear probing is a popular metric to evaluate self-supervised classifiers. It is computed as the accuracy of a logistic regression classifier trained on top of the encoder's features. In our case, this is done by training a single dense layer on top of the frozen encoder. Note that contrary to traditional approach where the classifier is trained after the pretraining phase, in this example we train it during pretraining. This might slightly decrease its accuracy, but that way we can monitor its value during training, which helps with experimentation and debugging.
@@ -157,21 +157,7 @@ class MoCo(tf.keras.models.Model):
 
         self.encoder = encoder 
         feature_dimensions = encoder.output_shape[1]
-        queue_init = tf.math.l2_normalize(
-            tf.random.normal([queue_len, feature_dimensions]), axis=1)
-
-        queue = tf.compat.v1.get_variable('queue', initializer=queue_init, trainable=False)
-
-        queue_ptr = tf.compat.v1.get_variable(
-            'queue_ptr',
-            [], initializer=tf.zeros_initializer(),
-            dtype=tf.int64, trainable=False)
-
-        self.temp = 0.07
-
-        self.queue = queue
-        self.queue_ptr = queue_ptr
-            
+        self.queue = tf.zeros((1, feature_dimensions))
         self.projection_head = projection_head 
         self.contrastive_augmenter = contrastive_augmenter 
         self.classification_augmenter = classification_augmenter
@@ -196,48 +182,16 @@ class MoCo(tf.keras.models.Model):
 
         #for layer in self.m_projection_head.layers:
          #   layer.trainable = False        
-
-
-    def allgather(self, tensor, name):
-        tensor = tf.identity(tensor, name=name + "_HVD")
-        return hvd.allgather(tensor)
-
-
-    def batch_shuffle(self, tensor):  # nx...
-        total, rank = hvd.size(), hvd.rank()
-        print(total, rank)
-        batch_size = tf.shape(tensor)[0]
-        with tf.device('/cpu:0'):
-            all_idx = tf.range(total * batch_size)
-            shuffle_idx = tf.random.shuffle(all_idx)
-            shuffle_idx = hvd.broadcast(shuffle_idx, 0)
-            my_idxs = tf.slice(shuffle_idx, [rank * batch_size], [batch_size])
-
-        all_tensor = allgather(tensor, 'batch_shuffle_key')  # gn x ...
-        return tf.gather(all_tensor, my_idxs), shuffle_idx
-
-
-    def batch_unshuffle(self, key_feat, shuffle_idxs):
-        rank = hvd.rank()
-        inv_shuffle_idx = tf.argsort(shuffle_idxs)
-        print(inv_shuffle_idx)
-        batch_size = tf.shape(key_feat)[0]
-        my_idxs = tf.slice(inv_shuffle_idx, [rank * batch_size], [batch_size])
-        all_key_feat = allgather(key_feat, "batch_unshuffle_feature")  # gn x c
-        return tf.gather(all_key_feat, my_idxs)
-        
-     def push_queue(self, queue, queue_ptr, item):
-        # queue: KxC
-        # item: NxC
-        item = allgather(item, 'queue_gather')  # GN x C
-        batch_size = tf.shape(item, out_type=tf.int64)[0]
-        end_queue_ptr = queue_ptr + batch_size
-
-        inds = tf.range(queue_ptr, end_queue_ptr, dtype=tf.int64)
-        with tf.control_dependencies([inds]):
-            queue_ptr_update = tf.compat.v1.assign(queue_ptr, end_queue_ptr % 128)
-        queue_update = tf.compat.v1.scatter_update(queue, inds, item)
-        return tf.group(queue_update, queue_ptr_update)
+    
+    def queue_them(self, k):
+        if self.queue == None:
+            self.queue = k
+        elif len(self.queue) >= self.queue_len:
+            batch_len = tf.shape(k)[0]
+            self.queue = self.queue[batch_len:]
+            self.queue = tf.concat([self.queue, k], axis=0)
+        else:
+            self.queue = tf.concat([self.queue, k], axis=0)
 
     def save_weights(self, epoch=0, loss=None):
         self.q_enc.save_weights(f"moco_weights_epoch_{epoch}_loss_{loss}.h5")
@@ -288,43 +242,36 @@ class MoCo(tf.keras.models.Model):
         )
 
     def train_step(self, inputs):
-        
         # unlabeled images and labeled i'mages
         (unlabeled_X, _), (labeled_X, labeled_y) = inputs
-        batch_size = labeled_X.shape[0]
         # combining both labeled and unlabeled images
         X = tf.concat([unlabeled_X, labeled_X], axis=0)
         x_q = self.contrastive_augmenter(X) 
         x_k = self.contrastive_augmenter(X)
-
-        shuffled_key, shuffle_idxs = self.batch_shuffle(key)
-        shuffled_key.set_shape([batch_size, None, None, None])
-
+        
+        q_temp = None
+        k_temp = None
         with tf.GradientTape() as tape:
             # embedding representation
-            q_feat = self.encoder(x_q)
-            q_feat = tf.math.l2_normalize(q_feat, axis=1)
+            q = self.encoder(x_q)
+            k = self.m_encoder(x_k)
 
-            key_feat = self.m_encoder(shuffled_key)
+            q_temp = q
+            k_temp = k 
 
-            key_feat = tf.math.l2_normalize(key_feat, axis=1)  # NxC
-            key_feat = self.batch_unshuffle(key_feat, shuffle_idxs)
-            key_feat = tf.stop_gradient(key_feat)
+            q = self.projection_head(q)
+            k = self.m_projection_head(k)
 
-            # loss
-            l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
-            l_neg = tf.einsum('nc,kc->nk', q_feat, self.queue)  # nxK
-            logits = tf.concat([l_pos, l_neg], axis=1)  # nx(1+k)
-            logits = logits * (1 / self.temp)
-            labels = tf.zeros(batch_size, dtype=tf.int64)  # n
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
-            loss = tf.reduce_mean(loss, name='xentropy-loss')
+            q = tf.reshape(q, (tf.shape(q)[0], 1, -1))
+            k = tf.reshape(k, (tf.shape(k)[0], -1, 1))
 
-        self.push_queue(self.queue, self.queue_ptr, key_feat)
+            contrastive_loss = self.con_loss(q, k, self.queue)
+
+        self.queue_them(tf.squeeze(k))
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
-        grads = tape.gradient(loss, encoder_params + proj_head_params)
+        grads = tape.gradient(contrastive_loss, encoder_params + proj_head_params)
 
         self.contrastive_optimizer.apply_gradients(
             zip(
