@@ -224,21 +224,10 @@ class MoCo(tf.keras.models.Model):
             layer.trainable = False        
 
 
-    def queue_them(self, keys):
-        #if self.queue == None:
-        #    self.queue = k
-        #elif len(self.queue) >= self.queue_len:
-         #   batch_len = tf.shape(k)[0]
-          #  self.queue = self.queue[batch_len:]
-           # self.queue = tf.concat([self.queue, k], axis=0)
-        #else:
-         #   self.queue = tf.concat([self.queue, k], axis=0)
-
-        # from pytorch impl
+    def _dequeue_and_enqueue(self, keys):
+        # batch size
         batch_size = keys.shape[0]
-
         ptr = int(self.queue_ptr)
-        #assert self.K % batch_size == 0  # for simplicity
 
         # replace the keys at ptr (dequeue and enqueue)
         self.queue[:, ptr : ptr + batch_size].assign(tf.transpose(keys)) 
@@ -258,24 +247,9 @@ class MoCo(tf.keras.models.Model):
     def batch_unshuffle(self, key_feat, idx_unshuffle):
         batch_size = tf.shape(key_feat)[0]
         return tf.gather(key_feat, idx_unshuffle)   
-        
-    def push_queue(self, queue, queue_ptr, item):
-        # queue: KxC
-        # item: NxC
-        
-        #item = allgather(item, 'queue_gather')  # GN x C
-        batch_size = tf.shape(item, out_type=tf.int64)[0]
-        end_queue_ptr = queue_ptr + batch_size
-
-        inds = tf.range(queue_ptr, end_queue_ptr, dtype=tf.int64)
-        with tf.control_dependencies([inds]):
-            queue_ptr_update = tf.compat.v1.assign(queue_ptr, end_queue_ptr % 128)
-        queue_update = tf.compat.v1.scatter_update(queue, inds, item)
-        return tf.group(queue_update, queue_ptr_update)
 
     def save_weights(self, epoch=0, loss=None):
         self.q_enc.save_weights(f"moco_weights_epoch_{epoch}_loss_{loss}.h5")
-
 
     def compile(self, contrastive_optimizer,
                  probe_optimizer, contrastive_loss, **kwargs):
@@ -323,7 +297,7 @@ class MoCo(tf.keras.models.Model):
 
     def train_step(self, inputs):
         
-        # unlabeled images and labeled i'mages
+        # unlabeled images and labeled images
         (unlabeled_X, _), (labeled_X, labeled_y) = inputs
         
         # combining both labeled and unlabeled images
@@ -332,38 +306,24 @@ class MoCo(tf.keras.models.Model):
         x_q = self.contrastive_augmenter(X) 
         x_k = self.contrastive_augmenter(X)
 
-        #shuffled_key, shuffle_idxs = self.batch_shuffle(x_k)
-        #shuffled_key.set_shape([batch_size, None, None, None])
-        
         with tf.GradientTape() as tape:
             # embedding representation
             q_feat = self.encoder(x_q)
             q_feat = tf.math.l2_normalize(q_feat, axis=1)
 
-            #key_feat = self.m_encoder(shuffled_key)
+            # shuffling the batch before encoding(key)
             im_k, idx_unshuffle = self.batch_shuffle(x_k)
-
             key_feat = self.m_encoder(im_k)
             key_feat = tf.math.l2_normalize(key_feat, axis=1)  # NxC
-          #  key_feat = self.batch_unshuffle(key_feat, shuffle_idxs)
 
+            # unshuffling the batch after encoding(key)
             key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
-            
-            #key_feat = tf.stop_gradient(key_feat)
-            l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
-            l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)  # nxK
-            
-            #l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)  # nxK
-            logits = tf.concat([l_pos, l_neg], axis=1)  # nx(1+k)
-            logits /= self.temp 
-            labels = tf.zeros(batch_size, dtype=tf.int64)  # n
 
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
-            loss = tf.reduce_mean(loss, name='xentropy-loss')
-
-
-        self.queue_them(key_feat)
-        #self.push_queue(self.queue, self.queue_ptr, key_feat)
+            # infonce loss
+            loss = self.con_loss(q_feat, key_feat, batch_size)
+        
+        # dequeue and enqueue
+        self._dequeue_and_enqueue(key_feat)
 
         #encoder_params, projection_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
         encoder_params = self.encoder.trainable_weights
@@ -443,50 +403,37 @@ class MoCo(tf.keras.models.Model):
     def save_weights(self, epoch=0, loss=None):
         self.encoder.save(f"simclr_weights_epoch_{epoch}_loss_{loss}", save_format="tf")
 
-    def con_loss(self, q_feat, key_feat, queue, temp, batch_size):
+    def con_loss(self, q_feat, key_feat, batch_size):
+        # calculating the positive similarities
         l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
-        l_neg = tf.einsum('nc,kc->nk', q_feat, queue)  # nxK
+
+        # calculating the negative similarites
+        l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)  # nxK
+        
+        # combining l_pos and l_neg for logits
         logits = tf.concat([l_pos, l_neg], axis=1)  # nx(1+k)
-        logits = logits * (1 / temp)
+        logits /= self.temp 
+
+        # pseduo labels
         labels = tf.zeros(batch_size, dtype=tf.int64)  # n
+
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         loss = tf.reduce_mean(loss, name='xentropy-loss')
 
         return loss 
 
-    def con_loss_1(self, q, k, batch_size):
+    def _momentum_update_key_encoder(self):
+        """
+        Momentum update of the key encoder
+        """
+        # the momentum networks are updated by exponential moving average
+        encoder_weights = self.encoder.weights
+        mom_encoder_weights = self.m_encoder.weights
 
-        q = tf.reshape(q, (tf.shape(q)[0], 1, -1))
-        k = tf.reshape(k, (tf.shape(k)[0], -1, 1))
-       
-        l_pos = tf.squeeze(tf.matmul(q, k), axis=-1)
-        l_neg = tf.matmul(tf.squeeze(q), tf.transpose(self.queue))
-        # logits = softmax(tf.concat([l_pos, l_neg], axis=1))
-        logits = tf.concat([l_pos, l_neg], axis=1)
-       #self.queue_them(tf.squeeze(k))
-        ###### keras-fashion version ######
-        # return logits
-        ###### gradient-tape version ###### 
-        labels = tf.zeros(batch_size)
-        loss = K.mean(sparse_categorical_crossentropy(labels, logits, from_logits=True))
-        l2 = tf.reduce_mean(tf.math.l2_normalize(q))
-        # print(K.max(logits, axis=1).numpy())
-        hits = tf.equal(tf.argmax(logits, axis=1), tf.cast(labels, 'int64'))
-        acc = tf.reduce_mean(tf.cast(hits, 'float64'))
+        for indx in range(len(encoder_weights)):
+            weight = encoder_weights[indx]
+            m_weight = mom_encoder_weights[indx]
 
-        return loss + 0.1 * l2
+            mom_encoder_weights[indx] = self.m * m_weight + (1 - self.m) * weight
 
-    # somewhat working
-    def con_loss_2(self):
-        # loss
-            #loss = self.con_loss(q_feat, key_feat, self.queue, self.temp, batch_size)
-            #loss = self.con_loss_1(q_feat, key_feat, batch_size)
-            #loss = tf.cast(loss, dtype=tf.float32)
-            labels = tf.zeros(batch_size, dtype=tf.int64)  # n
-            l_pos = tf.einsum('nc,nc->n', q_feat, tf.stop_gradient(key_feat))[:,None]
-            l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)
-            logits = tf.concat((l_pos, l_neg), axis=1)
-            logits /= self.temp
-
-            loss_moco = sparse_categorical_crossentropy(labels, logits, from_logits=True)
-            loss  = tf.reduce_mean(loss_moco)
+        self.m_encoder.set_weights(mom_encoder_weights)
