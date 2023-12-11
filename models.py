@@ -3,7 +3,7 @@ from tensorflow import keras
 import tensorflow as tf 
 import tensorflow.keras.backend as K
 from tensorflow.keras.losses import sparse_categorical_crossentropy
-
+import numpy as np 
 
 '''Contrastive accuracy: self-supervised metric, the ratio of cases in which the representation of an image is more similar to its differently augmented version's one, than to the representation of any other image in the current batch. Self-supervised metrics can be used for hyperparameter tuning even in the case when there are no labeled examples.
 Linear probing accuracy: linear probing is a popular metric to evaluate self-supervised classifiers. It is computed as the accuracy of a logistic regression classifier trained on top of the encoder's features. In our case, this is done by training a single dense layer on top of the frozen encoder. Note that contrary to traditional approach where the classifier is trained after the pretraining phase, in this example we train it during pretraining. This might slightly decrease its accuracy, but that way we can monitor its value during training, which helps with experimentation and debugging.
@@ -148,7 +148,7 @@ class MoCo(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
     def __init__(self, encoder, projection_head,
          contrastive_augmenter, classification_augmenter, 
-         linear_probe, m=0.1, queue_len=128, **kwargs):
+         linear_probe, m=0.999, queue_len=65000, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
        # hvd.init()
@@ -196,6 +196,27 @@ class MoCo(tf.keras.models.Model):
         
         self.m_encoder.set_weights(self.encoder.get_weights())
 
+
+        #self.register_buffer("queue", torch.randn(dim, K))
+        #self.queue = nn.functional.normalize(self.queue, dim=0)
+
+        #self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
+
+        #queue = tf.zeros((feature_dimensions, queue_len))
+        #self.queue = tf.math.l2_normalize(queue, axis=0)
+
+        _queue = np.random.normal(size=(feature_dimensions, queue_len))
+        _queue /= np.linalg.norm(_queue, axis=0)
+        self.queue = self.add_weight(
+            name='queue',
+            shape=(feature_dimensions, queue_len),
+            initializer=tf.keras.initializers.Constant(_queue),
+            trainable=False)
+
+        queue_ptr = tf.zeros((1, ), dtype=tf.int32)
+        self.queue_ptr = tf.Variable(queue_ptr)
+        self.queue_len = queue_len
+
         for layer in self.m_encoder.layers:
             layer.trainable = False  
 
@@ -203,15 +224,27 @@ class MoCo(tf.keras.models.Model):
             layer.trainable = False        
 
 
-    def queue_them(self, k):
-        if self.queue == None:
-            self.queue = k
-        elif len(self.queue) >= self.queue_len:
-            batch_len = tf.shape(k)[0]
-            self.queue = self.queue[batch_len:]
-            self.queue = tf.concat([self.queue, k], axis=0)
-        else:
-            self.queue = tf.concat([self.queue, k], axis=0)
+    def queue_them(self, keys):
+        #if self.queue == None:
+        #    self.queue = k
+        #elif len(self.queue) >= self.queue_len:
+         #   batch_len = tf.shape(k)[0]
+          #  self.queue = self.queue[batch_len:]
+           # self.queue = tf.concat([self.queue, k], axis=0)
+        #else:
+         #   self.queue = tf.concat([self.queue, k], axis=0)
+
+        # from pytorch impl
+        batch_size = keys.shape[0]
+
+        ptr = int(self.queue_ptr)
+        #assert self.K % batch_size == 0  # for simplicity
+
+        # replace the keys at ptr (dequeue and enqueue)
+        self.queue[:, ptr : ptr + batch_size].assign(tf.transpose(keys)) 
+        ptr = (ptr + batch_size) % self.queue_len  # move pointer
+
+        self.queue_ptr[0].assign(ptr) 
 
     def batch_shuffle(self, tensor):  # nx...
         batch_size = tf.shape(tensor)[0]
@@ -318,8 +351,9 @@ class MoCo(tf.keras.models.Model):
             
             #key_feat = tf.stop_gradient(key_feat)
             l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
-            #l_neg = tf.einsum('nc,kc->nk', q_feat, queue)  # nxK
             l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)  # nxK
+            
+            #l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)  # nxK
             logits = tf.concat([l_pos, l_neg], axis=1)  # nx(1+k)
             logits /= self.temp 
             labels = tf.zeros(batch_size, dtype=tf.int64)  # n
@@ -328,8 +362,8 @@ class MoCo(tf.keras.models.Model):
             loss = tf.reduce_mean(loss, name='xentropy-loss')
 
 
-       # self.queue_them(key_feat)
-        self.push_queue(self.queue, self.queue_ptr, key_feat)
+        self.queue_them(key_feat)
+        #self.push_queue(self.queue, self.queue_ptr, key_feat)
 
         #encoder_params, projection_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
         encoder_params = self.encoder.trainable_weights
@@ -363,10 +397,21 @@ class MoCo(tf.keras.models.Model):
 
 
         # the momentum networks are updated by exponential moving average
-        for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
-            m_weight.assign(
-                self.m * m_weight + (1 - self.m) * weight
-            )
+        encoder_weights = self.encoder.weights
+        mom_encoder_weights = self.m_encoder.weights
+
+        for indx in range(len(encoder_weights)):
+            weight = encoder_weights[indx]
+            m_weight = mom_encoder_weights[indx]
+
+            mom_encoder_weights[indx] = self.m * m_weight + (1 - self.m) * weight
+
+        self.m_encoder.set_weights(mom_encoder_weights)
+
+        #for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
+         #   m_weight.assign(
+                
+          #  )
         for weight, m_weight in zip(
             self.projection_head.weights, self.m_projection_head.weights
         ):
