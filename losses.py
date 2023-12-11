@@ -62,7 +62,7 @@ class InfoNCE(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
         [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, temp, **kwargs):
         """ 
             Calculates the contrastive loss of the input data using NT_Xent. The
             equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
@@ -78,19 +78,22 @@ class InfoNCE(tf.keras.losses.Loss):
                 loss: The complete NT_Xent constrastive loss
         """
         super(InfoNCE, self).__init__(**kwargs)
+        self.temp = temp
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
 
-    def __call__(self, q, k, queue):
-        l_pos = tf.squeeze(tf.matmul(q, k), axis=-1)
-        l_neg = tf.matmul(tf.squeeze(q), tf.transpose(queue))
-        # logits = softmax(tf.concat([l_pos, l_neg], axis=1))
-        logits = tf.concat([l_pos, l_neg], axis=1)
-        ###### keras-fashion version ######
-        # return logits
-        ###### gradient-tape version ###### 
-        labels = tf.zeros(tf.shape(q)[0])
-        loss = K.mean(self.criterion(labels, logits))
-        l2 = tf.reduce_mean(tf.math.l2_normalize(q))
-        # print(K.max(logits, axis=1).numpy())
-        hits = tf.equal(tf.argmax(logits, axis=1), tf.cast(labels, 'int64'))
-        return loss + 0.1 * l2
+    def __call__(self, q_feat, key_feat, queue, batch_size):
+        # calculating the positive similarities
+        l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
+
+        # calculating the negative similarites
+        l_neg = tf.einsum('nc,ck->nk', q_feat, queue)  # nxK
+        
+        # combining l_pos and l_neg for logits
+        logits = tf.concat([l_pos, l_neg], axis=1)  # nx(1+k)
+        logits /= self.temp 
+
+        # pseduo labels
+        labels = tf.zeros(batch_size, dtype=tf.int64)  # n
+
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+        loss = tf.reduce_mean(loss, name='xentropy-loss')
