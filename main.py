@@ -144,7 +144,7 @@ def main(args):
         monitor='c_loss',
         mode='min',
         save_best_only=True,
-        # save_weights
+        save_weights=True,
     )
 
     tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard_dir + '/' + args.model_type, 
@@ -178,7 +178,7 @@ def main(args):
     history = model.fit(train_dataset, 
                         epochs=args.num_epochs, 
                         validation_data=test_dataset, 
-                        callbacks=[tb_callback])
+                        callbacks=[tb_callback, model_checkpoint_callback])
 
     model.encoder.save('simclr_encoder')
 

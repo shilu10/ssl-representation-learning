@@ -283,7 +283,8 @@ class MoCo(tf.keras.models.Model):
             features_2 - tf.reduce_mean(features_2, axis=0)
         ) / tf.math.reduce_std(features_2, axis=0)
 
-        batch_size = tf.shape(features_1, out_type=tf.float32)[0]
+        batch_size = tf.shape(features_1)[0]
+        batch_size = tf.cast(batch_size, dtype=tf.float32)
         cross_correlation = (
             tf.matmul(features_1, features_2, transpose_a=True) / batch_size
         )
@@ -305,6 +306,8 @@ class MoCo(tf.keras.models.Model):
         batch_size = X.shape[0]
         x_q = self.contrastive_augmenter(X) 
         x_k = self.contrastive_augmenter(X)
+
+        self._momentum_update_key_encoder()
 
         with tf.GradientTape() as tape:
             # embedding representation
@@ -338,8 +341,8 @@ class MoCo(tf.keras.models.Model):
             )
         )
 
-        #self.update_contrastive_accuracy(q_temp, k_temp)
-        #self.update_correlation_accuracy(q_temp, k_temp)
+        self.update_contrastive_accuracy(q_feat, key_feat)
+        self.update_correlation_accuracy(q_feat, key_feat)
 
         # probe layer
         preprocessed_images = self.classification_augmenter(labeled_X)
@@ -360,13 +363,13 @@ class MoCo(tf.keras.models.Model):
         encoder_weights = self.encoder.weights
         mom_encoder_weights = self.m_encoder.weights
 
-        for indx in range(len(encoder_weights)):
-            weight = encoder_weights[indx]
-            m_weight = mom_encoder_weights[indx]
+        #for indx in range(len(encoder_weights)):
+         #   weight = encoder_weights[indx]
+          #  m_weight = mom_encoder_weights[indx]
 
-            mom_encoder_weights[indx] = self.m * m_weight + (1 - self.m) * weight
+           # mom_encoder_weights[indx] = self.m * m_weight + (1 - self.m) * weight
 
-        self.m_encoder.set_weights(mom_encoder_weights)
+        #self.m_encoder.set_weights(mom_encoder_weights)
 
         #for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
          #   m_weight.assign(
