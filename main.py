@@ -72,28 +72,29 @@ def main(args):
                 name="classification_augmenter",
             )
 
-    contrastive_augmenter = tf.keras.Sequential(
-            [
-                tf.keras.layers.Input(shape=(96, 96, 3)),
-                preprocessing.Rescaling(1 / 255),
-                preprocessing.RandomFlip("horizontal"),
-                RandomResizedCrop(scale=(0.2, 1.0), ratio=(3 / 4, 4 / 3)),
-                RandomColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
-            ],
-            name="contrastive_augmenter",
-        )
+    else:
+        contrastive_augmenter = tf.keras.Sequential(
+                [
+                    tf.keras.layers.Input(shape=(96, 96, 3)),
+                    preprocessing.Rescaling(1 / 255),
+                    preprocessing.RandomFlip("horizontal"),
+                    RandomResizedCrop(scale=(0.2, 1.0), ratio=(3 / 4, 4 / 3)),
+                    RandomColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
+                ],
+                name="contrastive_augmenter",
+            )
 
-    classification_augmenter = tf.keras.Sequential(
-            [
-                tf.keras.layers.Input(shape=(96, 96, 3)),
-                preprocessing.Rescaling(1 / 255),
-                preprocessing.RandomFlip("horizontal"),
-                
-                RandomResizedCrop(scale=(0.5, 1.0), ratio=(3 / 4, 4 / 3)),
-                RandomColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-            ],
-            name="classification_augmenter",
-        )
+        classification_augmenter = tf.keras.Sequential(
+                [
+                    tf.keras.layers.Input(shape=(96, 96, 3)),
+                    preprocessing.Rescaling(1 / 255),
+                    preprocessing.RandomFlip("horizontal"),
+                    
+                    RandomResizedCrop(scale=(0.5, 1.0), ratio=(3 / 4, 4 / 3)),
+                    RandomColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                ],
+                name="classification_augmenter",
+            )
 
     encoder = tf.keras.Sequential(
             [

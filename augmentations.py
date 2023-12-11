@@ -1,16 +1,74 @@
 import random
 import tensorflow as tf
-
+import numpy as np 
+import cv2 
 from tensorflow.keras import layers
+import tensorflow_addons as tfa 
+import keras_cv
 
 # the implementation of these image augmentations follow the torchvision library:
 # https://github.com/pytorch/vision/blob/master/torchvision/transforms/transforms.py
 # https://github.com/pytorch/vision/blob/master/torchvision/transforms/functional_tensor.py
 
-# however these augmentations:
-# -run on batches of images
-# -run on gpu
-# -can be part of a model
+
+class GaussianBlur(tf.keras.layers.Layer):
+    # Implements Gaussian blur as described in the SimCLR paper
+    def __init__(self, kernel_size, min=0.1, max=2.0, **kwargs):
+        super().__init__(**kwargs)
+        self.min = min
+        self.max = max
+        # kernel size is set to be 10% of the image height/width
+        self.kernel_size = kernel_size
+
+    def call(self, image, training=True):
+        if training:
+            #sample = np.array(image)
+
+            # blur the image with a 50% chance
+            rand_ = tf.random.uniform(shape=(), minval=0, maxval=1)
+            if rand_ < 0.5:
+
+                sigma = (self.max - self.min) * np.random.random_sample() + self.min
+                #image = cv2.GaussianBlur(image, (self.kernel_size, self.kernel_size), sigma)
+                image = tfa.image.gaussian_filter2d(image, sigma=sigma)
+
+        return image
+
+
+class RandomColorDisortion(tf.keras.layers.Layer):
+    def __init__(self, s=1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.s = s 
+    
+    # image is a tensor with value range in [0, 1].
+    # s is the strength of color distortion.
+
+    def color_jitter(self, x):
+        # one can also shuffle the order of following augmentations
+        # each time they are applied.
+        x = tf.image.random_brightness(x, max_delta=0.8 * self.s)
+        x = tf.image.random_contrast(x, lower=1 - 0.8 * self.s, upper=1 + 0.8 * self.s)
+        x = tf.image.random_saturation(x, lower=1 - 0.8 * self.s, upper=1 + 0.8 * self.s)
+        x = tf.image.random_hue(x, max_delta=0.2 * self.s)
+        x = tf.clip_by_value(x, 0, 1)
+        return x
+
+    def color_drop(self, x):
+        x = tf.image.rgb_to_grayscale(x)
+        x = tf.tile(x, [1, 1, 1, 3])
+        return x
+
+    def call(self, image, training=True):
+        if training:
+            rand_ = tf.random.uniform(shape=(), minval=0, maxval=1)
+            # randomly apply transformation with probability p.
+            if rand_ < 0.8:
+                image = self.color_jitter(image)
+
+            rand_ = tf.random.uniform(shape=(), minval=0, maxval=1)
+            if rand_ < 0.2:
+                image = self.color_drop(image)
+        return image
 
 
 # crops and resizes part of the image to the original resolutions
@@ -135,6 +193,9 @@ class RandomColorJitter(layers.Layer):
     def call(self, images, training=True):
         if training:
             # applies color augmentations in random order
-            for color_augmentation in random.sample(self.color_augmentations, 4):
-                images = color_augmentation(images)
+            rand_ = tf.random.uniform(shape=(), minval=0, maxval=1)
+            # randomly apply transformation with probability p.
+            if rand_ < 0.8:
+                for color_augmentation in random.sample(self.color_augmentations, 4):
+                    images = color_augmentation(images)
         return images
