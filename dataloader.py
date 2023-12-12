@@ -3,7 +3,7 @@ import tensorflow_datasets as tfds
 from augment import Augment 
 import imutils 
 from imutils import paths
-
+import os, sys, shutil
 
 AUTO = tf.data.experimental.AUTOTUNE
 
@@ -44,25 +44,16 @@ def prepare_dataset(steps_per_epoch):
     return batch_size, train_dataset, labeled_train_dataset, test_dataset
 
 
-
-
-args:
-    
-     model_type 
-     num_classes
-     image_size 
-     unlabelled_datapath 
-     train_datapath
-
-
 class DataLoader:
-    def __init__(self, args, num_workers):
+    def __init__(self, args, batch_size, shuffle, num_workers):
          self.args = args 
          self.num_workers
+         self.shuffle = shuffle
+         self.batch_size = batch_size
 
          self.augmenter = Augment(args)
 
-    def augmentation(self, image):
+    def augmentation(self, image, shape):
         augmented_images = [] 
         model_type = self.args.model_type
         
@@ -72,13 +63,15 @@ class DataLoader:
                 try:
 
                     if model_type == 'simclr':
-                        aug_img = self.augmenter._augment_simclr(image)
+                        radius = np.random.choice([3, 5])
+                        aug_img = self.augmenter._augment_simclr(image, shape, radius=radius)
 
                     elif model_type == 'mocov1':
-                        aug_img = self.augmenter__augment_mocov1(image)
+                        aug_img = self.augmenter__augment_mocov1(image, shape)
 
                     elif model_type == 'mocov2':
-                        aug_img = self.augmenter__augment_mocov2(image)
+                        radius = np.random.choice([3, 5])
+                        aug_img = self.augmenter__augment_mocov2(image, shape, radius=radius)
 
                     augmented_images.append(aug_img)
 
@@ -91,18 +84,18 @@ class DataLoader:
 
 
     def parse_file(self, file_path, y=None):
-         raw = tf.io.read_file(file_path)
+        raw = tf.io.read_file(file_path)
 
          # for supervised learning
-         if y is not None:
+        if y is not None:
             return tf.data.Dataset.from_tensors((raw, y))
 
         # for ssl pretext task 
-        return tf.data.Dataset.from_tensors((raw))
+        return tf.data.Dataset.from_tensors(raw)
 
     def prepare_images(self, value, label=None):
         shape = tf.image.extract_jpeg_shape(value)
-        img = tf.io.decode_jpeg(value, channels=3)
+        img = tf.io.decode_png(value, channels=3)
         if label is None:
             # moco
             query, key = self.augmentation(img, shape)
@@ -135,8 +128,24 @@ class DataLoader:
 
     def __call__(self):
 
-        if self.args.model_type != 'lincls':
-            dataset = tf.data.Dataset.from_tensor_slices(self.image_file_paths)
+        if self.args.task != 'lincls':
+            image_file_paths, label_list = self.prepare_files(mode="labeled")
+
+            dataset = tf.data.Dataset.from_tensor_slices((image_file_paths, label_list))
 
         else:
-            dataset = tf.data.Dataset.from_tensor_slices(self)
+            image_file_paths = self.prepare_files(mode='unlabeled')
+            dataset = tf.data.Dataset.from_tensor_slices(image_file_paths)
+
+
+        dataset = dataset.repeat()
+        if self.shuffle:
+            dataset = dataset.shuffle(len(image_file_paths))
+
+
+        dataset = dataset.interleave(self.parse_file, num_parallel_calls=AUTO)
+        dataset = dataset.map(self.prepare_images, num_parallel_calls=AUTO)
+        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.prefetch(AUTO)
+
+        return dataset 
