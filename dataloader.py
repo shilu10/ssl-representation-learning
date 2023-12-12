@@ -45,35 +45,49 @@ def prepare_dataset(steps_per_epoch):
 
 
 
+
+args:
+    
+     model_type 
+     num_classes
+     image_size 
+     unlabelled_datapath 
+     train_datapath
+
+
 class DataLoader:
     def __init__(self, args, num_workers):
          self.args = args 
          self.num_workers
 
-         self.image_file_paths = paths.list_images(args.datapath)
          self.augmenter = Augment(args)
 
-
-    def augment(self, image):
+    def augmentation(self, image):
         augmented_images = [] 
-        model_type = args.model_type
+        model_type = self.args.model_type
         
         if model_type in ['simclr', 'mocov1', 'mocov2']:
             # 2 -> two augmented views of images
             for _ in range(2):
+                try:
 
-                if model_type == 'simclr':
-                    aug_img = self.augmenter._augment_simclr(image)
+                    if model_type == 'simclr':
+                        aug_img = self.augmenter._augment_simclr(image)
 
-                elif model_type == 'mocov1':
-                    aug_img = self.augmenter__augment_mocov1(image)
+                    elif model_type == 'mocov1':
+                        aug_img = self.augmenter__augment_mocov1(image)
 
-                elif model_type == 'mocov2':
-                    aug_img = self.augmenter__augment_mocov2(image)
+                    elif model_type == 'mocov2':
+                        aug_img = self.augmenter__augment_mocov2(image)
 
-                augmented_images.append(aug_img)
+                    augmented_images.append(aug_img)
+
+                except Exception as err:
+                    print(err)
 
             return augmented_images
+
+        return self.augmenter._augment_lincls(img, shape)
 
 
     def parse_file(self, file_path, y=None):
@@ -86,8 +100,43 @@ class DataLoader:
         # for ssl pretext task 
         return tf.data.Dataset.from_tensors((raw))
 
-    def prepare_images(self):
-        pass 
+    def prepare_images(self, value, label=None):
+        shape = tf.image.extract_jpeg_shape(value)
+        img = tf.io.decode_jpeg(value, channels=3)
+        if label is None:
+            # moco
+            query, key = self.augmentation(img, shape)
+            inputs = {'query': query, 'key': key}
+
+            return inputs
+            
+        else:
+            # lincls
+            inputs = self.augmentation(img, shape)
+            labels = tf.one_hot(label, self.args.classes)
+            return (inputs, labels)
+
+    def prepare_files(self, mode='unlabeled'):
+        if mode == 'unlabeled':
+            datapath = self.args.unlabelled_datapath
+            image_file_paths = list(paths.list_images(datapath))
+
+            return image_file_paths
+
+        else:
+            datapath = self.args.train_datapath
+            all_classes = [(cls_name, indx) for indx, cls_name in enumerate(os.listdir(datapath))]
+            all_classes_dict = dict(all_classes)
+
+            image_file_paths = list(paths.list_images(datapath))
+            label_list = [all_classes_dict[image_path.split('/')[-2]] for image_path in image_file_paths]
+
+            return image_file_paths, label_list
 
     def __call__(self):
-        pass 
+
+        if self.args.model_type != 'lincls':
+            dataset = tf.data.Dataset.from_tensor_slices(self.image_file_paths)
+
+        else:
+            dataset = tf.data.Dataset.from_tensor_slices(self)
