@@ -1,9 +1,29 @@
 import tensorflow as tf
 import numpy as np
+from glob import glob                                                           
+import cv2 
 
 
 cosine_sim_1d = tf.keras.losses.CosineSimilarity(axis=1, reduction=tf.keras.losses.Reduction.NONE)
 cosine_sim_2d = tf.keras.losses.CosineSimilarity(axis=2, reduction=tf.keras.losses.Reduction.NONE)
+
+
+from glob import glob                                                           
+import cv2 
+
+def convert_x_to_y_image_format(dir_path, x_format='png', y_format='jpg'):
+    files = glob('/kaggle/input/cifar10/cifar10/train/**/*.png', recursive=True)
+    for file in files:
+        # Load .png image
+        image = cv2.imread(file)
+
+        # Save .jpg image
+        splitted = file.split('/')
+        dir_name = splitted[-2]
+        file_name = splitted[-1]
+
+        #out = cv2.imwrite(j[:-3] + 'jpeg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
+        out = cv2.imwrite(f"cifar10/{dir_name}/{file_name[: -3]}" + 'jpeg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
 
 
 ## negative mask used in simclr loss
