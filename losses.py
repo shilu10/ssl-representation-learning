@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np 
 import os,sys,shutil 
 import tensorflow.keras.backend as K
+from utils.losses import _dot_simililarity_dim1 as sim_func_dim1, _dot_simililarity_dim2 as sim_func_dim2
 
 
 class NTXent(tf.keras.losses.Loss):
@@ -29,31 +30,35 @@ class NTXent(tf.keras.losses.Loss):
         self.criterion = tf.keras.losses.CategoricalCrossentropy(from_logits=True) 
         self.tau = tau
 
-    def call(self, zi, zj):
-        z = tf.cast(tf.concat([zi, zj], 0), dtype=tf.float32)
-        loss = 0 
+    def call(self, zis, zjs):
+        # calculate the positive samples similarities
+        l_pos = sim_func_dim1(zis, zjs)
+        batch_size = zis.shape[0]
+        l_pos = tf.reshape(l_pos, (batch_size, 1))
+        l_pos /= self.tau
+        # assert l_pos.shape == (config['batch_size'], 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
 
-        for k in range(zi.shape[0]):
-            # Numerator (compare i,j & j,i)
-            i = k
-            j = k + zi.shape[0]
+        # combine all the zis and zijs and consider as negatives 
+        negatives = tf.concat([zjs, zis], axis=0)
 
-            sim = tf.squeeze(- self.cosine_sim(tf.reshape(z[i], (1, -1)), tf.reshape(z[j], (1, -1))))
-            numerator = tf.math.exp(sim / self.tau)
+        loss = 0
 
-            # Denominator (compare i & j to all samples apart from themselves)
-            sim_ik = - self.cosine_sim(tf.reshape(z[i], (1, -1)), z[tf.range(z.shape[0]) != i])
-            sim_jk = - self.cosine_sim(tf.reshape(z[j], (1, -1)), z[tf.range(z.shape[0]) != j])
-            denominator_ik = tf.reduce_sum(tf.math.exp(sim_ik / self.tau))
-            denominator_jk = tf.reduce_sum(tf.math.exp(sim_jk / self.tau))
+        for positives in [zis, zjs]:
+            l_neg = sim_func_dim2(positives, negatives)
 
-            # Calculate individual and combined losses
-            loss_ij = - tf.math.log(numerator / denominator_ik)
-            loss_ji = - tf.math.log(numerator / denominator_jk)
-            loss += loss_ij + loss_ji
+            labels = tf.zeros(config['batch_size'], dtype=tf.int32)
 
-        # Divide by the total number of samples
-        loss /= z.shape[0]
+            l_neg = tf.boolean_mask(l_neg, negative_mask)
+            l_neg = tf.reshape(l_neg, (config['batch_size'], -1))
+            l_neg /= config['temperature']
+
+            # assert l_neg.shape == (
+            #     config['batch_size'], 2 * (config['batch_size'] - 1)), "Shape of negatives not expected." + str(
+            #     l_neg.shape)
+            logits = tf.concat([l_pos, l_neg], axis=1)  # [N,K+1]
+            loss += criterion(y_pred=logits, y_true=labels)
+
+        loss = loss / (2 * batch_size)
 
         return loss 
 
@@ -97,3 +102,33 @@ class InfoNCE(tf.keras.losses.Loss):
 
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         loss = tf.reduce_mean(loss, name='xentropy-loss')
+
+
+
+def call(self, zi, zj):
+        z = tf.cast(tf.concat([zi, zj], 0), dtype=tf.float32)
+        loss = 0 
+
+        for k in range(zi.shape[0]):
+            # Numerator (compare i,j & j,i)
+            i = k
+            j = k + zi.shape[0]
+
+            sim = tf.squeeze(- self.cosine_sim(tf.reshape(z[i], (1, -1)), tf.reshape(z[j], (1, -1))))
+            numerator = tf.math.exp(sim / self.tau)
+
+            # Denominator (compare i & j to all samples apart from themselves)
+            sim_ik = - self.cosine_sim(tf.reshape(z[i], (1, -1)), z[tf.range(z.shape[0]) != i])
+            sim_jk = - self.cosine_sim(tf.reshape(z[j], (1, -1)), z[tf.range(z.shape[0]) != j])
+            denominator_ik = tf.reduce_sum(tf.math.exp(sim_ik / self.tau))
+            denominator_jk = tf.reduce_sum(tf.math.exp(sim_jk / self.tau))
+
+            # Calculate individual and combined losses
+            loss_ij = - tf.math.log(numerator / denominator_ik)
+            loss_ji = - tf.math.log(numerator / denominator_jk)
+            loss += loss_ij + loss_ji
+
+        # Divide by the total number of samples
+        loss /= z.shape[0]
+
+        return loss

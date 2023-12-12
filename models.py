@@ -89,6 +89,10 @@ class SimCLR(tf.keras.models.Model):
             zi = self.projection_head(hi)
             zj = self.projection_head(hj)
 
+            # apply l2 normalization on zis and zjs 
+            zi = tf.math.l2_normalize(zi, axis=1)
+            zj = tf.math.l2_normalize(zj, axis=1)
+
             contrastive_loss = self.contrastive_loss(zi, zj)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights

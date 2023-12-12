@@ -8,7 +8,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # suppress info-level logs
 from tensorflow.keras.layers.experimental import preprocessing
 
 from dataloader import prepare_dataset
-from augmentations import RandomResizedCrop, RandomColorJitter
+from augmentations import RandomResizedCrop, RandomColorJitter, RandomColorDisortion, GaussianBlur
 from models import SimCLR, MoCo
 from losses import NTXent, InfoNCE
 from backbone import ResNet50
