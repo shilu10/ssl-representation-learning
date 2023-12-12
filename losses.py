@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np 
 import os,sys,shutil 
 import tensorflow.keras.backend as K
-from utils.losses import _dot_simililarity_dim1 as sim_func_dim1, _dot_simililarity_dim2 as sim_func_dim2
+from utils import _dot_simililarity_dim1 as sim_func_dim1, _dot_simililarity_dim2 as sim_func_dim2, get_negative_mask
 
 
 class NTXent(tf.keras.losses.Loss):
@@ -27,13 +27,17 @@ class NTXent(tf.keras.losses.Loss):
         """
         super(NTXent, self).__init__(**kwargs)
         self.cosine_sim = tf.keras.losses.CosineSimilarity(axis=-1, reduction=tf.keras.losses.Reduction.NONE)
-        self.criterion = tf.keras.losses.CategoricalCrossentropy(from_logits=True) 
+        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
+                                                                        reduction=tf.keras.losses.Reduction.SUM)
         self.tau = tau
 
     def call(self, zis, zjs):
+        
         # calculate the positive samples similarities
         l_pos = sim_func_dim1(zis, zjs)
         batch_size = zis.shape[0]
+        negative_mask = get_negative_mask(batch_size)
+
         l_pos = tf.reshape(l_pos, (batch_size, 1))
         l_pos /= self.tau
         # assert l_pos.shape == (config['batch_size'], 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
@@ -46,17 +50,17 @@ class NTXent(tf.keras.losses.Loss):
         for positives in [zis, zjs]:
             l_neg = sim_func_dim2(positives, negatives)
 
-            labels = tf.zeros(config['batch_size'], dtype=tf.int32)
+            labels = tf.zeros(batch_size, dtype=tf.int32)
 
             l_neg = tf.boolean_mask(l_neg, negative_mask)
-            l_neg = tf.reshape(l_neg, (config['batch_size'], -1))
-            l_neg /= config['temperature']
+            l_neg = tf.reshape(l_neg, (batch_size, -1))
+            l_neg /= self.tau
 
             # assert l_neg.shape == (
             #     config['batch_size'], 2 * (config['batch_size'] - 1)), "Shape of negatives not expected." + str(
             #     l_neg.shape)
             logits = tf.concat([l_pos, l_neg], axis=1)  # [N,K+1]
-            loss += criterion(y_pred=logits, y_true=labels)
+            loss += self.criterion(y_pred=logits, y_true=labels)
 
         loss = loss / (2 * batch_size)
 

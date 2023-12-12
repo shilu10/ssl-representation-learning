@@ -1,7 +1,21 @@
 import tensorflow as tf
+import numpy as np
+
 
 cosine_sim_1d = tf.keras.losses.CosineSimilarity(axis=1, reduction=tf.keras.losses.Reduction.NONE)
 cosine_sim_2d = tf.keras.losses.CosineSimilarity(axis=2, reduction=tf.keras.losses.Reduction.NONE)
+
+
+## negative mask used in simclr loss
+def get_negative_mask(batch_size):
+    # return a mask that removes the similarity score of equal/similar images.
+    # this function ensures that only distinct pair of images get their similarity scores
+    # passed as negative examples
+    negative_mask = np.ones((batch_size, 2 * batch_size), dtype=bool)
+    for i in range(batch_size):
+        negative_mask[i, i] = 0
+        negative_mask[i, i + batch_size] = 0
+    return tf.constant(negative_mask)
 
 
 def _cosine_simililarity_dim1(x, y):
@@ -31,3 +45,4 @@ def _dot_simililarity_dim2(x, y):
     # y shape: (1, C, 2N)
     # v shape: (N, 2N)
     return v
+
