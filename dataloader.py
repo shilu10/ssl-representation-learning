@@ -44,12 +44,13 @@ def prepare_dataset(steps_per_epoch):
     return batch_size, train_dataset, labeled_train_dataset, test_dataset
 
 
+
 class DataLoader:
-    def __init__(self, args, batch_size, shuffle, num_workers):
+    def __init__(self, args, num_workers):
          self.args = args 
-         self.num_workers
-         self.shuffle = shuffle
-         self.batch_size = batch_size
+         self.num_workers = num_workers
+         self.shuffle = True
+         self.batch_size=32
 
          self.augmenter = Augment(args)
 
@@ -57,7 +58,7 @@ class DataLoader:
         augmented_images = [] 
         model_type = self.args.model_type
         
-        if model_type in ['simclr', 'mocov1', 'mocov2']:
+        if self.args.task == "pretraining":
             # 2 -> two augmented views of images
             for _ in range(2):
                 try:
@@ -70,8 +71,7 @@ class DataLoader:
                         aug_img = self.augmenter__augment_mocov1(image, shape)
 
                     elif model_type == 'mocov2':
-                        radius = np.random.choice([3, 5])
-                        aug_img = self.augmenter__augment_mocov2(image, shape, radius=radius)
+                        aug_img = self.augmenter__augment_mocov2(image, shape)
 
                     augmented_images.append(aug_img)
 
@@ -80,7 +80,7 @@ class DataLoader:
 
             return augmented_images
 
-        return self.augmenter._augment_lincls(img, shape)
+        return self.augmenter._augment_lincls(image, shape)
 
 
     def parse_file(self, file_path, y=None):
@@ -95,6 +95,7 @@ class DataLoader:
 
     def prepare_images(self, value, label=None):
         shape = tf.image.extract_jpeg_shape(value)
+        #shape = tf.shape(value)
         img = tf.io.decode_png(value, channels=3)
         if label is None:
             # moco
@@ -128,7 +129,7 @@ class DataLoader:
 
     def __call__(self):
 
-        if self.args.task != 'lincls':
+        if self.args.task == 'lincls':
             image_file_paths, label_list = self.prepare_files(mode="labeled")
 
             dataset = tf.data.Dataset.from_tensor_slices((image_file_paths, label_list))
