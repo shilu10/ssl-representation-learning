@@ -1,11 +1,11 @@
 import tensorflow as tf
 import numpy as np
 from glob import glob                                                           
-import cv2 
+import cv2, os, shutil, sys 
+import random
 
-
-cosine_sim_1d = tf.keras.losses.CosineSimilarity(axis=1, reduction=tf.keras.losses.Reduction.NONE)
-cosine_sim_2d = tf.keras.losses.CosineSimilarity(axis=2, reduction=tf.keras.losses.Reduction.NONE)
+cosine_sim_1d = tf.keras.metrics.CosineSimilarity(axis=1)
+cosine_sim_2d = tf.keras.metrics.CosineSimilarity(axis=2)
 
 
 from glob import glob                                                           

@@ -11,7 +11,7 @@ from tensorflow.keras.layers.experimental import preprocessing
 #from augmentations import RandomResizedCrop, RandomColorJitter, RandomColorDisortion, GaussianBlur
 from models import SimCLR, MoCo
 from losses import NTXent, InfoNCE
-from main_helper import get_args, get_encoder, get_logger
+from helper import get_args, get_encoder, get_logger
 from dataloader import DataLoader
 from utils import set_seed, search_same, get_session
 
@@ -21,17 +21,18 @@ tf.get_logger().setLevel("WARN")  # suppress info-level logs
 def main(args):
 
     set_seed()
-    args, initial_epoch = search_same(args)
+    #args, initial_epoch = search_same(args)
+    initial_epoch = 0
 
     if initial_epoch == -1:
         # training was already finished!
         return
 
-    elif initial_epoch == 0:
+    #elif initial_epoch == 0:
         # first training or training with snapshot
-        args.stamp = create_stamp()
+     #   args.stamp = create_stamp()
 
-    get_session(args)
+   # get_session(args)
     
     logger = get_logger(args.model_type)
 
@@ -50,7 +51,7 @@ def main(args):
     )
     pretraining_data_generator = loader()
     print(pretraining_data_generator)
-    steps_per_epoch = loader.num_image_files
+    steps_per_epoch = loader.num_image_files / args.batch_size
 
     logger.info("Loaded pretraining dataloader")
     logger.info(f"Batch size: {args.batch_size}")
@@ -136,8 +137,6 @@ def main(args):
                         initial_epoch=initial_epoch,
                         callbacks=[tb_callback, model_checkpoint_callback], 
                         steps_per_epoch=steps_per_epoch)
-
-    model.encoder.save('simclr_encoder')
 
 
 if __name__ == '__main__':

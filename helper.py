@@ -1,3 +1,5 @@
+import tensorflow as tf 
+from tensorflow import keras 
 from argparse import ArgumentParser
 import numpy as np 
 from backbone import ResNet50, simple_cnn
@@ -22,11 +24,11 @@ def get_args():
     parser.add_argument('--backbone', type=str,
                         default='resnet50',help="Type of backbone network to use as encoder, options(resnet model, simplecnn)")
 
-    parser.add_argument('--tensorboard', type=bool,
-                        default=True, help="Whether to use tensorboard summaries")
+    parser.add_argument('--tensorboard', type=str,
+                        default='logs/', help="Whether to use tensorboard summaries")
 
-    parser.add_argument('--history', type=bool,
-                        default=True, help="Whether to use history callbacks")
+    parser.add_argument('--history', type=str,
+                        default='history', help="Whether to use history callbacks")
 
     parser.add_argument('--result_path', type=str,
                         default="./results", help="Directory to store all the results")
@@ -34,8 +36,8 @@ def get_args():
     parser.add_argument('--resume', type=bool,
                         default=False, help="Whether to resume or not")
 
-    parser.add_argument('--checkpoint', type=bool,
-                        default=True, help="whether to use tensorboard checkpoint")
+    parser.add_argument('--checkpoint', type=str,
+                        default='ckpt', help="whether to use tensorboard checkpoint")
 
     parser.add_argument('--model_type', type=str,
                         default='simclr', help="type of ssl model to train, options(simclr, mocov1, v2)")
