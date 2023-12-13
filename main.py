@@ -11,7 +11,7 @@ from tensorflow.keras.layers.experimental import preprocessing
 #from augmentations import RandomResizedCrop, RandomColorJitter, RandomColorDisortion, GaussianBlur
 from models import SimCLR, MoCo
 from losses import NTXent, InfoNCE
-from helper import get_args, get_encoder, get_logger
+from main_helper import get_args, get_encoder, get_logger
 from dataloader import DataLoader
 
 
@@ -37,6 +37,7 @@ def main(args):
 
     logger.info("Loaded pretraining dataloader")
     logger.info(f"Batch size: {args.batch_size}")
+    logger.info(f"Number of steps_per_epoch: {100000/args.batch_size}")
 
     ########################
     # ENCODER AND PROJ HEAD
@@ -86,7 +87,7 @@ def main(args):
     ###################
     
     if args.model_type == 'simclr':
-        contrastive_loss = NTXent()
+        contrastive_loss = NTXent(batch_size=args.batch_size)
         model = SimCLR(
             encoder = encoder,
             projection_head = projection_head,
@@ -109,10 +110,13 @@ def main(args):
         contrastive_loss = contrastive_loss,
     )
 
-    history = model.fit(pretraining_loader, 
+    logger.info(f"STARTING TRAINING OF MODEL WITH {args.num_epochs} EPOCHS.")
+
+    history = model.fit(pretraining_data_generator, 
                         epochs=args.num_epochs, 
                         #validation_data=test_dataset, 
-                        callbacks=[tb_callback])
+                        callbacks=[tb_callback], 
+                        steps_per_epoch=100000/args.batch_size)
 
     model.encoder.save('simclr_encoder')
 

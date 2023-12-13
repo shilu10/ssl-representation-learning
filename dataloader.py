@@ -4,6 +4,8 @@ from augment import Augment
 import imutils 
 from imutils import paths
 import os, sys, shutil
+import numpy as np 
+
 
 AUTO = tf.data.experimental.AUTOTUNE
 
