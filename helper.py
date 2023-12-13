@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 import numpy as np 
+from backbone import ResNet50, simple_cnn
 
 
 def get_args():
@@ -122,3 +123,43 @@ def create_stamp():
         temp.minute,
         temp.second,
     )
+
+
+def get_encoder(enc_type, img_size):
+    if enc_type=="resnet":
+            encoder = ResNet50(
+                data_format="channels_last",
+                trainable = True,
+                include_top = False,
+                pooling='avg'
+            )
+
+    else:
+        encoder = simple_cnn(img_size)
+
+    return encoder
+
+
+def get_args():
+    parser = ArgumentParser()
+
+    parser.add_argument('--num_epochs', type=int, default=30) 
+    parser.add_argument('--steps_per_epoch', type=int, default=200)
+    parser.add_argument('--width', type=int, default=128)
+    parser.add_argument('--backbone', type=str, default='resnet50')
+    parser.add_argument('--tensorboard_dir', type=str, default='./logs')
+    parser.add_argument('--checkpoint_filepath', type=str, default='./tmp/ckpt/model.h5')
+    parser.add_argument('--model_type', type=str, default='simclr')
+    parser.add_argument('--task', type=str, default='pretraining')
+    parser.add_argument('--model_type', type=str, default='simclr')
+    parser.add_argument('--unlabeled_data_path', type=str, default='cifar_dataset/train/')
+    parser.add_argument('--train_data_path', type=str, default='cifar_dataset/train/')
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--shuffle', type=bool, default=True)
+    parser.add_argument('--contrast', type=int, default=0.4)
+    parser.add_argument('--saturation', type=int, default=0.4)
+    parser.add_argument('--hue', type=int, default=0.4)
+    parser.add_argument('--brightness', type=int, default=0.4)
+    parser.add_argument('--img_size', type=int, default=96)
+
+    return parser.parse_args()
