@@ -26,13 +26,14 @@ def main(args):
     # DATALOADER
     #######################
 
-    pretraining_loader = DataLoader(
+    loader = DataLoader(
         args = args,
         batch_size = args.batch_size,
         shuffle = args.shuffle,
         num_workers = 1 ,
     )
-    print(pretraining_loader)
+    pretraining_data_generator = loader()
+    print(pretraining_data_generator)
 
     logger.info("Loaded pretraining dataloader")
     logger.info(f"Batch size: {args.batch_size}")
@@ -43,7 +44,8 @@ def main(args):
 
     encoder = get_encoder(
                 enc_type=args.backbone, 
-                img_size=args.img_size
+                img_size=args.img_size,
+                width=args.width
             )
 
     projection_head = tf.keras.Sequential(
