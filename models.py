@@ -75,13 +75,7 @@ class SimCLR(tf.keras.models.Model):
         )
 
     def train_step(self, inputs):
-        # unlabeled images and labeled i'mages
-        #(unlabeled_X, _), (labeled_X, labeled_y) = inputs
-
-        # combining both labeled and unlabeled images
-        #X = tf.concat([unlabeled_X, labeled_X], axis=0)
-        #xi = self.contrastive_augmenter(X) 
-        #xj = self.contrastive_augmenter(X)
+  
         xi = inputs['query']
         xj = inputs['key']
 
@@ -97,8 +91,6 @@ class SimCLR(tf.keras.models.Model):
             # apply l2 normalization on zis and zjs 
             zi = tf.math.l2_normalize(zi, axis=1)
             zj = tf.math.l2_normalize(zj, axis=1)
-
-            print(zi, zj, "zi")
 
             contrastive_loss = self.contrastive_loss(zi, zj)
 
@@ -116,11 +108,8 @@ class SimCLR(tf.keras.models.Model):
         self.update_contrastive_accuracy(hi, hj)
         self.update_correlation_accuracy(hi, hj)
 
-        logits, labels = self.contrastive_loss.logits, self.contrastive_loss.labels
 
-        print(logits, labels, logits.shape, labels.shape)
-
-        [metric.update_state(labels, logits) for metric in self.acc_metrics]
+        #[metric.update_state(labels, n_logits) for metric in self.acc_metrics]
 
         # probe layer
         #preprocessed_images = self.classification_augmenter(labeled_X)
@@ -135,7 +124,7 @@ class SimCLR(tf.keras.models.Model):
         #)
         #self.probe_accuracy.update_state(labeled_y, class_logits)
 
-        results = {m.name: m.result() for m in self.acc_metrics}
+        results = {}
 
         results.update(
             {
@@ -167,7 +156,6 @@ class SimCLR(tf.keras.models.Model):
 class MoCo(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
     def __init__(self, encoder, projection_head,
-         contrastive_augmenter, classification_augmenter, 
          linear_probe, m=0.999, queue_len=65000, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
@@ -198,8 +186,8 @@ class MoCo(tf.keras.models.Model):
         #self.queue_len = queue_len
             
         self.projection_head = projection_head 
-        self.contrastive_augmenter = contrastive_augmenter 
-        self.classification_augmenter = classification_augmenter
+       # self.contrastive_augmenter = contrastive_augmenter 
+       # self.classification_augmenter = classification_augmenter
         self.linear_probe = linear_probe
 
         # metric function 
@@ -319,13 +307,17 @@ class MoCo(tf.keras.models.Model):
     def train_step(self, inputs):
         
         # unlabeled images and labeled images
-        (unlabeled_X, _), (labeled_X, labeled_y) = inputs
+        #(unlabeled_X, _), (labeled_X, labeled_y) = inputs
         
         # combining both labeled and unlabeled images
-        X = tf.concat([unlabeled_X, labeled_X], axis=0)
-        batch_size = X.shape[0]
-        x_q = self.contrastive_augmenter(X) 
-        x_k = self.contrastive_augmenter(X)
+        #X = tf.concat([unlabeled_X, labeled_X], axis=0)
+        
+        #x_q = self.contrastive_augmenter(X) 
+        #x_k = self.contrastive_augmenter(X)
+        x_q = inputs['query']
+        x_k = inputs['key']
+
+        batch_size = x_q.shape[0]
 
         self._momentum_update_key_encoder()
 
@@ -365,23 +357,23 @@ class MoCo(tf.keras.models.Model):
         self.update_correlation_accuracy(q_feat, key_feat)
 
         # probe layer
-        preprocessed_images = self.classification_augmenter(labeled_X)
-        with tf.GradientTape() as tape:
-            features = self.encoder(preprocessed_images)
-            class_logits = self.linear_probe(features)
-            probe_loss = self.probe_loss(labeled_y, class_logits)
+        #preprocessed_images = self.classification_augmenter(labeled_X)
+        #with tf.GradientTape() as tape:
+         #   features = self.encoder(preprocessed_images)
+         #   class_logits = self.linear_probe(features)
+          #  probe_loss = self.probe_loss(labeled_y, class_logits)
         
-        gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
+        #gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
 
-        self.probe_optimizer.apply_gradients(
-            zip(gradients, self.linear_probe.trainable_weights)
-        )
-        self.probe_accuracy.update_state(labeled_y, class_logits)
+        #self.probe_optimizer.apply_gradients(
+        #    zip(gradients, self.linear_probe.trainable_weights)
+        #)
+        #self.probe_accuracy.update_state(labeled_y, class_logits)
 
 
         # the momentum networks are updated by exponential moving average
-        encoder_weights = self.encoder.weights
-        mom_encoder_weights = self.m_encoder.weights
+       # encoder_weights = self.encoder.weights
+        #mom_encoder_weights = self.m_encoder.weights
 
         #for indx in range(len(encoder_weights)):
          #   weight = encoder_weights[indx]
@@ -395,19 +387,19 @@ class MoCo(tf.keras.models.Model):
          #   m_weight.assign(
                 
           #  )
-        for weight, m_weight in zip(
-            self.projection_head.weights, self.m_projection_head.weights
-        ):
-            m_weight.assign(
-                self.m * m_weight + (1 - self.m) * weight
-            )
+        #for weight, m_weight in zip(
+         #   self.projection_head.weights, self.m_projection_head.weights
+        #):
+         #   m_weight.assign(
+          #      self.m * m_weight + (1 - self.m) * weight
+           # )
 
         return {
             "c_loss": loss,
             "c_acc": self.contrastive_accuracy.result(),
             "r_acc": self.correlation_accuracy.result(),
-            "p_loss": probe_loss,
-            "p_acc": self.probe_accuracy.result(),
+            #"p_loss": probe_loss,
+           # "p_acc": self.probe_accuracy.result(),
         }
 
     def test_step(self, inputs):
@@ -423,8 +415,6 @@ class MoCo(tf.keras.models.Model):
         self.probe_accuracy.update_state(labels, class_logits)
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
 
-    def save_weights(self, epoch=0, loss=None):
-        self.encoder.save(f"simclr_weights_epoch_{epoch}_loss_{loss}", save_format="tf")
 
     def con_loss(self, q_feat, key_feat, batch_size):
         # calculating the positive similarities

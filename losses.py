@@ -89,16 +89,13 @@ class NTXent(tf.keras.losses.Loss):
             # assert l_neg.shape == (
             #     config['batch_size'], 2 * (config['batch_size'] - 1)), "Shape of negatives not expected." + str(
             #     l_neg.shape)
-            print(l_neg.shape, l_pos.shape, "lneg")
-            logits = tf.concat([l_pos, l_neg], axis=1)  # [N,K+1]
+            logits = tf.concat([l_pos, l_neg], axis=1)  # [N, K+1]
             loss += self.criterion(y_pred=logits, y_true=labels)
         
         loss = loss / (2 * self.batch_size)
 
-        print(logits.shape, logits)
-
-        self.logits = logits
-        self.labels = labels
+        #self.logits = logits
+        #self.labels = labels
 
         return loss
 
@@ -107,7 +104,7 @@ class InfoNCE(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
         [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
     """
-    def __init__(self, temp, **kwargs):
+    def __init__(self, temp=0.07, **kwargs):
         """ 
             Calculates the contrastive loss of the input data using NT_Xent. The
             equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
