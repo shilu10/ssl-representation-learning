@@ -91,7 +91,7 @@ class NTXent(tf.keras.losses.Loss):
 
         loss = loss / (2 * self.batch_size)
 
-        return loss 
+        return loss, (labels, logits)
 
 
 class InfoNCE(tf.keras.losses.Loss):

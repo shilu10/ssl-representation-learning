@@ -53,6 +53,7 @@ class DataLoader:
          self.num_workers = num_workers
          self.shuffle = shuffle
          self.batch_size=batch_size
+         self.num_image_files = None
 
          self.augmenter = Augment(args)
 
@@ -140,7 +141,9 @@ class DataLoader:
             image_file_paths = self.prepare_files(mode='unlabeled')
             dataset = tf.data.Dataset.from_tensor_slices(image_file_paths)
 
-
+        # for calculating steps_per_epoch
+        self.num_image_files = len(image_file_paths)
+        
         dataset = dataset.repeat()
         if self.shuffle:
             dataset = dataset.shuffle(len(image_file_paths))
