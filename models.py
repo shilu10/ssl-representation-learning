@@ -28,7 +28,7 @@ class SimCLR(tf.keras.models.Model):
         self.probe_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
          
     def compile(self, contrastive_optimizer,
-                 probe_optimizer, contrastive_loss, **kwargs):
+                 probe_optimizer, contrastive_loss, metrics, **kwargs):
         super().compile(**kwargs)
         self.probe_optimizer = probe_optimizer
         self.contrastive_optimizer = contrastive_optimizer
@@ -97,7 +97,7 @@ class SimCLR(tf.keras.models.Model):
             zi = tf.math.l2_normalize(zi, axis=1)
             zj = tf.math.l2_normalize(zj, axis=1)
 
-            contrastive_loss = self.contrastive_loss(zi, zj)
+            contrastive_loss, (labels, logits) = self.contrastive_loss(zi, zj)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
@@ -112,6 +112,8 @@ class SimCLR(tf.keras.models.Model):
 
         self.update_contrastive_accuracy(hi, hj)
         self.update_correlation_accuracy(hi, hj)
+
+        self.compiled_metrics.update_state(labels, logits)
 
         # probe layer
         #preprocessed_images = self.classification_augmenter(labeled_X)
