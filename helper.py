@@ -7,70 +7,70 @@ def get_args():
     parser = ArgumentParser()
 
     parser.add_argument('--num_epochs', type=int, 
-                        default=30, description="Number of epochs to train our model") 
+                        default=30, help="Number of epochs to train our model") 
 
-    #parser.add_argument('--steps_per_epoch', type=int, default=200, description=)
+    #parser.add_argument('--steps_per_epoch', type=int, default=200, help=)
     parser.add_argument('--width', type=int, default=128, 
-                        description="output shape of neural network, when backbone is simple cnn (not resnet50)", 
+                        help="output shape of neural network, when backbone is simple cnn (not resnet50)", 
                         choices=['simplecnn', 'resnet50'])
 
     parser.add_argument('--backbone', type=str,
-                        default='resnet50',description="Type of backbone network to use as encoder, options(resnet model, simplecnn)")
+                        default='resnet50',help="Type of backbone network to use as encoder, options(resnet model, simplecnn)")
 
     parser.add_argument('--tensorboard', type=str,
-                        default='./logs',description="directory for tensorboard summaries")
+                        default='./logs',help="directory for tensorboard summaries")
 
     parser.add_argument('--checkpoint', type=str,
-                        default='./tmp/ckpt/model.h5', description="directory  for tensorboard checkpoint")
+                        default='./tmp/ckpt/model.h5', help="directory  for tensorboard checkpoint")
 
     parser.add_argument('--model_type', type=str,
-                        default='simclr', description="type of ssl model to train, options(simclr, mocov1, v2)")
+                        default='simclr', help="type of ssl model to train, options(simclr, mocov1, v2)")
 
     parser.add_argument('--task', type=str, 
-                        default='pretraining', description="Type of task, options(pretraining, lincls)")
+                        default='pretraining', help="Type of task, options(pretraining, lincls)")
 
     parser.add_argument('--unlabeled_data_path', type=str, 
-                        default='cifar_dataset/train/', description="Directory path for the unlabeled data")
+                        default='cifar_dataset/train/', help="Directory path for the unlabeled data")
 
     parser.add_argument('--train_data_path', type=str, 
-                        default='cifar_dataset/train/', description="Directory path for the train data")
+                        default='cifar_dataset/train/', help="Directory path for the train data")
 
     parser.add_argument('--batch_size', type=int, 
-                        default=32, description="Batch Size, to be used in the dataloader")
+                        default=32, help="Batch Size, to be used in the dataloader")
 
     parser.add_argument('--shuffle', type=bool, 
-                        default=True, description="Boolean value tells whether or not to shuffle data in the dataloader")
+                        default=True, help="Boolean value tells whether or not to shuffle data in the dataloader")
 
     parser.add_argument('--contrast', type=int, 
-                        default=0.4, description="contrast value to use in data augmentation")
+                        default=0.4, help="contrast value to use in data augmentation")
 
     parser.add_argument('--saturation', type=int, 
-                        default=0.4, description="saturation value to use in data augmentation")
+                        default=0.4, help="saturation value to use in data augmentation")
 
     parser.add_argument('--hue', type=int, 
-                        default=0.4, description="hue value to use in data augmentation")
+                        default=0.4, help="hue value to use in data augmentation")
 
     parser.add_argument('--brightness', type=int, 
-                        default=0.4, description="brightness value to use in data augmentation")
+                        default=0.4, help="brightness value to use in data augmentation")
 
     parser.add_argument('--img_size', type=int,
-                        default=96, description="Image shape(same as input shape for backbone)")
+                        default=96, help="Image shape(same as input shape for backbone)")
 
     parser.add_argument('--n_classes', type=int, 
-                        default=10, description="Number of classes in the task (dataset)")
+                        default=10, help="Number of classes in the task (dataset)")
 
     parser.add_argument('--lr_mode', type=str, default="exponential", 
-                        description="Type of mode in decay learning rate", 
+                        help="Type of mode in decay learning rate", 
                         choices=["exponential", "constant", "step", "inverse", "cosine"])
 
     parser.add_argument('--initial_lr', type=float, 
-                        default=0.4, description="Initial Learning Rate value")
+                        default=0.4, help="Initial Learning Rate value")
 
     parser.add_argument('--temperature', type=float, 
-                        default=0.4, description="Initial Learning Rate value")
+                        default=0.4, help="Initial Learning Rate value")
 
     parser.add_argument('--weight_decay', type=float, 
-                        default=0.4, description="Decay value to use in decay learning rate")
+                        default=0.4, help="Decay value to use in decay learning rate")
 
     parser.add_argument("--gpus", type=str, default='-1')
 
