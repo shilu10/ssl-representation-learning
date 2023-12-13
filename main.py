@@ -32,9 +32,10 @@ def main(args):
         shuffle = args.shuffle,
         num_workers = 1 ,
     )
+    print(pretraining_loader)
 
     logger.info("Loaded pretraining dataloader")
-    logger.info(f"Batch size: {batch_size}")
+    logger.info(f"Batch size: {args.batch_size}")
 
     ########################
     # ENCODER AND PROJ HEAD
