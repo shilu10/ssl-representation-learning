@@ -130,7 +130,7 @@ def create_stamp():
     )
 
 
-def get_encoder(enc_type, img_size):
+def get_encoder(enc_type, img_size, width):
     if enc_type=="resnet":
             encoder = ResNet50(
                 data_format="channels_last",
@@ -140,7 +140,44 @@ def get_encoder(enc_type, img_size):
             )
 
     else:
-        encoder = simple_cnn(img_size)
+        encoder = simple_cnn(img_size, width)
 
     return encoder
 
+
+class OptionalLearningRateSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, args, steps_per_epoch, initial_epoch):
+        super(OptionalLearningRateSchedule, self).__init__()
+        self.args = args
+        self.steps_per_epoch = steps_per_epoch
+        self.initial_epoch = initial_epoch
+
+        if self.args.lr_mode == 'exponential':
+            decay_epochs = [int(e) for e in self.args.lr_interval.split(',')]
+            lr_values = [self.args.lr * (self.args.lr_value ** k)for k in range(len(decay_epochs) + 1)]
+            self.lr_scheduler = \
+                tf.keras.optimizers.schedules.PiecewiseConstantDecay(decay_epochs, lr_values)
+
+        elif self.args.lr_mode == 'cosine':
+            self.lr_scheduler = \
+                tf.keras.experimental.CosineDecay(self.args.lr, self.args.epochs)
+
+        elif self.args.lr_mode == 'constant':
+            self.lr_scheduler = lambda x: self.args.lr
+            
+    def get_config(self):
+        return {
+            'steps_per_epoch': self.steps_per_epoch,
+            'init_lr': self.args.lr,
+            'lr_mode': self.args.lr_mode,
+            'lr_value': self.args.lr_value,
+            'lr_interval': self.args.lr_interval,}
+
+    def __call__(self, step):
+        step = tf.cast(step, tf.float32)
+        step += self.initial_epoch * self.steps_per_epoch
+        lr_epoch = (step / self.steps_per_epoch)
+        if self.args.lr_mode == 'constant':
+            return self.args.lr
+        else:
+            return self.lr_scheduler(lr_epoch)

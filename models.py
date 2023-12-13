@@ -11,8 +11,7 @@ Linear probing accuracy: linear probing is a popular metric to evaluate self-sup
 
 class SimCLR(tf.keras.models.Model):
     
-    def __init__(self, encoder, projection_head,
-         contrastive_augmenter, classification_augmenter, linear_probe, **kwargs):
+    def __init__(self, encoder, projection_head, linear_probe, **kwargs):
         super(SimCLR, self).__init__(**kwargs)
         self.encoder = encoder 
         self.projection_head = projection_head 
@@ -60,7 +59,9 @@ class SimCLR(tf.keras.models.Model):
             features_2 - tf.reduce_mean(features_2, axis=0)
         ) / tf.math.reduce_std(features_2, axis=0)
 
-        batch_size = tf.shape(features_1, out_type=tf.float32)[0]
+        batch_size = tf.shape(features_1)[0]
+        batch_size = tf.cast(batch_size, dtype=tf.float32)
+        
         cross_correlation = (
             tf.matmul(features_1, features_2, transpose_a=True) / batch_size
         )

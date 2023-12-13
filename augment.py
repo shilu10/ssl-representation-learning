@@ -353,5 +353,5 @@ class Augment:
 
     def _random_gaussian_blur(self, x, radius, p=.5):
         if tf.less(tf.random.uniform(shape=[], minval=0, maxval=1, dtype=tf.float32), tf.cast(p, tf.float32)):
-            x = tfa.image.gaussian_filter2d(x, filter_shape=radius)
+            x = tfa.image.gaussian_filter2d(x, filter_shape=(radius, radius))
         return x

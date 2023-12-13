@@ -10,7 +10,7 @@ class NTXent(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
         [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
     """
-    def __init__(self, tau=1, **kwargs):
+    def __init__(self, tau=1, batch_size=32, **kwargs):
         """ 
             Calculates the contrastive loss of the input data using NT_Xent. The
             equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
@@ -26,6 +26,7 @@ class NTXent(tf.keras.losses.Loss):
                 loss: The complete NT_Xent constrastive loss
         """
         super(NTXent, self).__init__(**kwargs)
+        self.batch_size = batch_size
         self.cosine_sim = tf.keras.losses.CosineSimilarity(axis=-1, reduction=tf.keras.losses.Reduction.NONE)
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
                                                                         reduction=tf.keras.losses.Reduction.SUM)
@@ -39,7 +40,6 @@ class NTXent(tf.keras.losses.Loss):
             # Numerator (compare i,j & j,i)
             i = k
             j = k + zi.shape[0]
-
             sim = tf.squeeze(- self.cosine_sim(tf.reshape(z[i], (1, -1)), tf.reshape(z[j], (1, -1))))
             numerator = tf.math.exp(sim / self.tau)
 
@@ -63,10 +63,9 @@ class NTXent(tf.keras.losses.Loss):
         
         # calculate the positive samples similarities
         l_pos = sim_func_dim1(zis, zjs)
-        batch_size = zis.shape[0]
-        negative_mask = get_negative_mask(batch_size)
+        negative_mask = get_negative_mask(self.batch_size)
 
-        l_pos = tf.reshape(l_pos, (batch_size, 1))
+        l_pos = tf.reshape(l_pos, (self.batch_size, 1))
         l_pos /= self.tau
         # assert l_pos.shape == (config['batch_size'], 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
 
@@ -78,10 +77,10 @@ class NTXent(tf.keras.losses.Loss):
         for positives in [zis, zjs]:
             l_neg = sim_func_dim2(positives, negatives)
 
-            labels = tf.zeros(batch_size, dtype=tf.int32)
+            labels = tf.zeros(self.batch_size, dtype=tf.int32)
 
             l_neg = tf.boolean_mask(l_neg, negative_mask)
-            l_neg = tf.reshape(l_neg, (batch_size, -1))
+            l_neg = tf.reshape(l_neg, (self.batch_size, -1))
             l_neg /= self.tau
 
             # assert l_neg.shape == (
@@ -90,7 +89,7 @@ class NTXent(tf.keras.losses.Loss):
             logits = tf.concat([l_pos, l_neg], axis=1)  # [N,K+1]
             loss += self.criterion(y_pred=logits, y_true=labels)
 
-        loss = loss / (2 * batch_size)
+        loss = loss / (2 * self.batch_size)
 
         return loss 
 
