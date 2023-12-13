@@ -32,6 +32,9 @@ class NTXent(tf.keras.losses.Loss):
                                                                         reduction=tf.keras.losses.Reduction.SUM)
         self.tau = tau
 
+        self.logits = None 
+        self.labels = None 
+
     def call_1(self, zi, zj):
         z = tf.cast(tf.concat([zi, zj], 0), dtype=tf.float32)
         loss = 0 
@@ -77,7 +80,7 @@ class NTXent(tf.keras.losses.Loss):
         for positives in [zis, zjs]:
             l_neg = sim_func_dim2(positives, negatives)
 
-            labels = tf.zeros(self.batch_size, dtype=tf.int32)
+            labels = tf.zeros(self.batch_size, dtype=tf.int64)
 
             l_neg = tf.boolean_mask(l_neg, negative_mask)
             l_neg = tf.reshape(l_neg, (self.batch_size, -1))
@@ -86,12 +89,18 @@ class NTXent(tf.keras.losses.Loss):
             # assert l_neg.shape == (
             #     config['batch_size'], 2 * (config['batch_size'] - 1)), "Shape of negatives not expected." + str(
             #     l_neg.shape)
+            print(l_neg.shape, l_pos.shape, "lneg")
             logits = tf.concat([l_pos, l_neg], axis=1)  # [N,K+1]
             loss += self.criterion(y_pred=logits, y_true=labels)
-
+        
         loss = loss / (2 * self.batch_size)
 
-        return loss, (labels, logits)
+        print(logits.shape, logits)
+
+        self.logits = logits
+        self.labels = labels
+
+        return loss
 
 
 class InfoNCE(tf.keras.losses.Loss):

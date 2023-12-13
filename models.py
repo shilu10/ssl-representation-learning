@@ -33,6 +33,7 @@ class SimCLR(tf.keras.models.Model):
         self.probe_optimizer = probe_optimizer
         self.contrastive_optimizer = contrastive_optimizer
         self.contrastive_loss = contrastive_loss
+        self.acc_metrics = metrics
 
     def reset_metrics(self):
         self.contrastive_accuracy.reset_states()
@@ -97,7 +98,9 @@ class SimCLR(tf.keras.models.Model):
             zi = tf.math.l2_normalize(zi, axis=1)
             zj = tf.math.l2_normalize(zj, axis=1)
 
-            contrastive_loss, (labels, logits) = self.contrastive_loss(zi, zj)
+            print(zi, zj, "zi")
+
+            contrastive_loss = self.contrastive_loss(zi, zj)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
@@ -113,7 +116,11 @@ class SimCLR(tf.keras.models.Model):
         self.update_contrastive_accuracy(hi, hj)
         self.update_correlation_accuracy(hi, hj)
 
-        self.compiled_metrics.update_state(labels, logits)
+        logits, labels = self.contrastive_loss.logits, self.contrastive_loss.labels
+
+        print(logits, labels, logits.shape, labels.shape)
+
+        [metric.update_state(labels, logits) for metric in self.acc_metrics]
 
         # probe layer
         #preprocessed_images = self.classification_augmenter(labeled_X)
@@ -128,13 +135,20 @@ class SimCLR(tf.keras.models.Model):
         #)
         #self.probe_accuracy.update_state(labeled_y, class_logits)
 
-        return {
+        results = {m.name: m.result() for m in self.acc_metrics}
+
+        results.update(
+            {
             "c_loss": contrastive_loss,
             "c_acc": self.contrastive_accuracy.result(),
             "r_acc": self.correlation_accuracy.result(),
-         #   "p_loss": probe_loss,
+            #   "p_loss": probe_loss,
             "p_acc": self.probe_accuracy.result(),
-        }
+
+            }
+        ) 
+
+        return results
 
     def test_step(self, inputs):
         labeled_images, labels = inputs
@@ -148,10 +162,6 @@ class SimCLR(tf.keras.models.Model):
 
         self.probe_accuracy.update_state(labels, class_logits)
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
-
-    def save_weights(self, epoch=0, loss=None):
-        self.encoder.save_weights(f"simclr_weights_epoch_{epoch}_loss_{loss}.h5")
-
 
 
 class MoCo(tf.keras.models.Model):
