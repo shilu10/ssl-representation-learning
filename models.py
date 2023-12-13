@@ -256,15 +256,13 @@ class MoCo(tf.keras.models.Model):
         batch_size = tf.shape(key_feat)[0]
         return tf.gather(key_feat, idx_unshuffle)   
 
-    def save_weights(self, epoch=0, loss=None):
-        self.q_enc.save_weights(f"moco_weights_epoch_{epoch}_loss_{loss}.h5")
-
     def compile(self, contrastive_optimizer,
-                 probe_optimizer, contrastive_loss, **kwargs):
+                 probe_optimizer, contrastive_loss, metrics, **kwargs):
         super().compile(**kwargs)
         self.probe_optimizer = probe_optimizer
         self.contrastive_optimizer = contrastive_optimizer
         self.contrastive_loss = contrastive_loss
+        self.acc_metrics = metrics
 
     def reset_metrics(self):
         self.contrastive_accuracy.reset_states()
@@ -335,7 +333,7 @@ class MoCo(tf.keras.models.Model):
             key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
 
             # infonce loss
-            loss = self.con_loss(q_feat, key_feat, batch_size)
+            loss, labels, logits = self.con_loss(q_feat, key_feat, batch_size)
         
         # dequeue and enqueue
         self._dequeue_and_enqueue(key_feat)
@@ -355,6 +353,8 @@ class MoCo(tf.keras.models.Model):
 
         self.update_contrastive_accuracy(q_feat, key_feat)
         self.update_correlation_accuracy(q_feat, key_feat)
+
+        accs = [metric.update_state(labels, logits) for metric in self.acc_metrics]
 
         # probe layer
         #preprocessed_images = self.classification_augmenter(labeled_X)
@@ -394,13 +394,17 @@ class MoCo(tf.keras.models.Model):
           #      self.m * m_weight + (1 - self.m) * weight
            # )
 
-        return {
+        results = {m.name: m.result() for m in self.acc_metrics}
+
+        results.update({
             "c_loss": loss,
             "c_acc": self.contrastive_accuracy.result(),
             "r_acc": self.correlation_accuracy.result(),
             #"p_loss": probe_loss,
            # "p_acc": self.probe_accuracy.result(),
-        }
+        })
+
+        return results
 
     def test_step(self, inputs):
         labeled_images, labels = inputs
@@ -433,7 +437,7 @@ class MoCo(tf.keras.models.Model):
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         loss = tf.reduce_mean(loss, name='xentropy-loss')
 
-        return loss 
+        return loss, labesl, logits
 
     def _momentum_update_key_encoder(self):
         """
