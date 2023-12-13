@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 import numpy as np 
 from backbone import ResNet50, simple_cnn
+import logging
 
 
 def get_args():
