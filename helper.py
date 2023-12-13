@@ -34,10 +34,10 @@ def get_args():
     parser.add_argument('--task', type=str, 
                         default='pretraining', help="Type of task, options(pretraining, lincls)")
 
-    parser.add_argument('--unlabeled_data_path', type=str, 
+    parser.add_argument('--unlabeled_datapath', type=str, 
                         default='cifar_dataset/train/', help="Directory path for the unlabeled data")
 
-    parser.add_argument('--train_data_path', type=str, 
+    parser.add_argument('--train_datapath', type=str, 
                         default='cifar_dataset/train/', help="Directory path for the train data")
 
     parser.add_argument('--batch_size', type=int, 
