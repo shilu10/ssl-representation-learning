@@ -112,7 +112,7 @@ class DataLoader:
 
     def prepare_files(self, mode='unlabeled'):
         if mode == 'unlabeled':
-            datapath = self.args.unlabelled_datapath
+            datapath = self.args.unlabeled_datapath
             image_file_paths = list(paths.list_images(datapath))
 
             return image_file_paths
