@@ -46,11 +46,11 @@ def prepare_dataset(steps_per_epoch):
 
 
 class DataLoader:
-    def __init__(self, args, num_workers):
+    def __init__(self, args, batch_size, shuffle, num_workers):
          self.args = args 
          self.num_workers = num_workers
-         self.shuffle = True
-         self.batch_size=32
+         self.shuffle = shuffle
+         self.batch_size=batch_size
 
          self.augmenter = Augment(args)
 

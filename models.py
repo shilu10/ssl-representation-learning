@@ -16,8 +16,8 @@ class SimCLR(tf.keras.models.Model):
         super(SimCLR, self).__init__(**kwargs)
         self.encoder = encoder 
         self.projection_head = projection_head 
-        self.contrastive_augmenter = contrastive_augmenter 
-        self.classification_augmenter = classification_augmenter
+       # self.contrastive_augmenter = contrastive_augmenter 
+       # self.classification_augmenter = classification_augmenter
         self.linear_probe = linear_probe
 
         # metric function 
@@ -74,11 +74,14 @@ class SimCLR(tf.keras.models.Model):
 
     def train_step(self, inputs):
         # unlabeled images and labeled i'mages
-        (unlabeled_X, _), (labeled_X, labeled_y) = inputs
+        #(unlabeled_X, _), (labeled_X, labeled_y) = inputs
+
         # combining both labeled and unlabeled images
-        X = tf.concat([unlabeled_X, labeled_X], axis=0)
-        xi = self.contrastive_augmenter(X) 
-        xj = self.contrastive_augmenter(X)
+        #X = tf.concat([unlabeled_X, labeled_X], axis=0)
+        #xi = self.contrastive_augmenter(X) 
+        #xj = self.contrastive_augmenter(X)
+        xi = inputs['query']
+        xj = inputs['key']
 
         with tf.GradientTape() as tape:
             # embedding representation
@@ -110,23 +113,23 @@ class SimCLR(tf.keras.models.Model):
         self.update_correlation_accuracy(hi, hj)
 
         # probe layer
-        preprocessed_images = self.classification_augmenter(labeled_X)
-        with tf.GradientTape() as tape:
-            features = self.encoder(preprocessed_images)
-            class_logits = self.linear_probe(features)
-            probe_loss = self.probe_loss(labeled_y, class_logits)
-        gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
+        #preprocessed_images = self.classification_augmenter(labeled_X)
+        #with tf.GradientTape() as tape:
+         #   features = self.encoder(preprocessed_images)
+         #   class_logits = self.linear_probe(features)
+         #   probe_loss = self.probe_loss(labeled_y, class_logits)
+        #gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
 
-        self.probe_optimizer.apply_gradients(
-            zip(gradients, self.linear_probe.trainable_weights)
-        )
-        self.probe_accuracy.update_state(labeled_y, class_logits)
+       # self.probe_optimizer.apply_gradients(
+        #    zip(gradients, self.linear_probe.trainable_weights)
+        #)
+        #self.probe_accuracy.update_state(labeled_y, class_logits)
 
         return {
             "c_loss": contrastive_loss,
             "c_acc": self.contrastive_accuracy.result(),
             "r_acc": self.correlation_accuracy.result(),
-            "p_loss": probe_loss,
+         #   "p_loss": probe_loss,
             "p_acc": self.probe_accuracy.result(),
         }
 
