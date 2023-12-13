@@ -104,7 +104,7 @@ class InfoNCE(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
         [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
     """
-    def __init__(self, temp=0.07, **kwargs):
+    def __init__(self, temp=0.07, batch_size, **kwargs):
         """ 
             Calculates the contrastive loss of the input data using NT_Xent. The
             equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
@@ -121,9 +121,10 @@ class InfoNCE(tf.keras.losses.Loss):
         """
         super(InfoNCE, self).__init__(**kwargs)
         self.temp = temp
+        self.batch_size = batch_size
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
 
-    def __call__(self, q_feat, key_feat, queue, batch_size):
+    def __call__(self, q_feat, key_feat, queue):
         # calculating the positive similarities
         l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
 
@@ -135,10 +136,12 @@ class InfoNCE(tf.keras.losses.Loss):
         logits /= self.temp 
 
         # pseduo labels
-        labels = tf.zeros(batch_size, dtype=tf.int64)  # n
+        labels = tf.zeros(self.batch_size, dtype=tf.int64)  # n
 
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         loss = tf.reduce_mean(loss, name='xentropy-loss')
+
+        return loss 
 
 
 
