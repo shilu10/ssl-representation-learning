@@ -29,8 +29,8 @@ def main(args):
     pretraining_loader = DataLoader(
         args = args,
         batch_size = args.batch_size,
-        shuffle = args.shuffle 
-        num_workers = 1 
+        shuffle = args.shuffle,
+        num_workers = 1 ,
     )
 
     logger.info("Loaded pretraining dataloader")
