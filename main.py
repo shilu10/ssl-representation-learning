@@ -111,22 +111,20 @@ def main(args):
             linear_probe = None
         )
 
-    elif args.model_type == "moco":
-        contrastive_loss = InfoNCE()
+    elif args.model_type == "mocov1":
+        contrastive_loss = InfoNCE(temp=0.07)
         model = MoCo(
             encoder = encoder,
             projection_head = projection_head,
-            contrastive_augmenter = contrastive_augmenter,
-            classification_augmenter = classification_augmenter,
-            linear_probe = linear_probe
+            linear_probe = None
         )
 
     model.compile(
         contrastive_optimizer=contrastive_optimizer, 
         probe_optimizer = probe_optimizer,
         contrastive_loss = contrastive_loss,
-        metrics=[tf.keras.metrics.TopKCategoricalAccuracy(1, 'acc1', dtype=tf.float32),
-                tf.keras.metrics.TopKCategoricalAccuracy(5, 'acc5', dtype=tf.float32)],
+        metrics=[tf.keras.metrics.SparseTopKCategoricalAccuracy(1, 'acc1', dtype=tf.float32),
+                tf.keras.metrics.SparseTopKCategoricalAccuracy(5, 'acc5', dtype=tf.float32)],
     )
 
     logger.info(f"STARTING TRAINING OF MODEL WITH {args.num_epochs} EPOCHS.")

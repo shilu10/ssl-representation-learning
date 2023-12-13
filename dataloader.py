@@ -71,10 +71,10 @@ class DataLoader:
                         aug_img = self.augmenter._augment_simclr(image, shape, radius=radius)
 
                     elif model_type == 'mocov1':
-                        aug_img = self.augmenter__augment_mocov1(image, shape)
+                        aug_img = self.augmenter._augment_mocov1(image, shape)
 
                     elif model_type == 'mocov2':
-                        aug_img = self.augmenter__augment_mocov2(image, shape)
+                        aug_img = self.augmenter._augment_mocov2(image, shape)
 
                     augmented_images.append(aug_img)
 
