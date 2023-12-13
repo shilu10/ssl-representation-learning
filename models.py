@@ -4,6 +4,8 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.losses import sparse_categorical_crossentropy
 import numpy as np 
+from utils import _cosine_simililarity_dim1 as sim_func_dim1, _cosine_simililarity_dim2 as sim_func_dim2
+from utils import get_negative_mask
 
 '''Contrastive accuracy: self-supervised metric, the ratio of cases in which the representation of an image is more similar to its differently augmented version's one, than to the representation of any other image in the current batch. Self-supervised metrics can be used for hyperparameter tuning even in the case when there are no labeled examples.
 Linear probing accuracy: linear probing is a popular metric to evaluate self-supervised classifiers. It is computed as the accuracy of a logistic regression classifier trained on top of the encoder's features. In our case, this is done by training a single dense layer on top of the frozen encoder. Note that contrary to traditional approach where the classifier is trained after the pretraining phase, in this example we train it during pretraining. This might slightly decrease its accuracy, but that way we can monitor its value during training, which helps with experimentation and debugging.
@@ -15,8 +17,6 @@ class SimCLR(tf.keras.models.Model):
         super(SimCLR, self).__init__(**kwargs)
         self.encoder = encoder 
         self.projection_head = projection_head 
-       # self.contrastive_augmenter = contrastive_augmenter 
-       # self.classification_augmenter = classification_augmenter
         self.linear_probe = linear_probe
 
         # metric function 
@@ -79,6 +79,10 @@ class SimCLR(tf.keras.models.Model):
         xi = inputs['query']
         xj = inputs['key']
 
+        batch_size = xi.shape[0]
+
+        print(batch_size, "bs")
+
         with tf.GradientTape() as tape:
             # embedding representation
             hi = self.encoder(xi)
@@ -92,7 +96,7 @@ class SimCLR(tf.keras.models.Model):
             zi = tf.math.l2_normalize(zi, axis=1)
             zj = tf.math.l2_normalize(zj, axis=1)
 
-            contrastive_loss = self.contrastive_loss(zi, zj)
+            contrastive_loss, labels, logits = self.con_loss(zi, zj, batch_size)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
@@ -108,6 +112,7 @@ class SimCLR(tf.keras.models.Model):
         self.update_contrastive_accuracy(hi, hj)
         self.update_correlation_accuracy(hi, hj)
 
+        accs = [metric.update_state(labels, logits) for metric in self.acc_metrics]
 
         #[metric.update_state(labels, n_logits) for metric in self.acc_metrics]
 
@@ -124,7 +129,7 @@ class SimCLR(tf.keras.models.Model):
         #)
         #self.probe_accuracy.update_state(labeled_y, class_logits)
 
-        results = {}
+        results = {m.name: m.result() for m in self.acc_metrics}
 
         results.update(
             {
@@ -138,6 +143,40 @@ class SimCLR(tf.keras.models.Model):
         ) 
 
         return results
+
+    def con_loss(self, zis, zjs, batch_size):
+        # calculate the positive samples similarities
+        l_pos = sim_func_dim1(zis, zjs)
+        negative_mask = get_negative_mask(batch_size)
+
+        l_pos = tf.reshape(l_pos, (batch_size, 1))
+        l_pos /= self.tau
+        # assert l_pos.shape == (config['batch_size'], 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
+
+        # combine all the zis and zijs and consider as negatives 
+        negatives = tf.concat([zjs, zis], axis=0)
+
+        loss = 0
+
+        for positives in [zis, zjs]:
+            l_neg = sim_func_dim2(positives, negatives)
+
+            labels = tf.zeros(batch_size, dtype=tf.int64)
+
+            l_neg = tf.boolean_mask(l_neg, negative_mask)
+            l_neg = tf.reshape(l_neg, (batch_size, -1))
+            l_neg /= 0.07
+
+            # assert l_neg.shape == (
+            #     config['batch_size'], 2 * (config['batch_size'] - 1)), "Shape of negatives not expected." + str(
+            #     l_neg.shape)
+            logits = tf.concat([l_pos, l_neg], axis=1)  # [N, K+1]
+            loss += tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+        
+        loss = loss / (2 * batch_size)
+
+        return loss, labels, logits
+
 
     def test_step(self, inputs):
         labeled_images, labels = inputs
@@ -161,33 +200,13 @@ class MoCo(tf.keras.models.Model):
         super(MoCo, self).__init__(dynamic=True)
        # hvd.init()
         self.m = m
-        self.queue_len = queue_len
-
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
-
-        self.encoder = encoder 
+        
         feature_dimensions = encoder.output_shape[1]
-        queue_init = tf.math.l2_normalize(
-            tf.random.normal([queue_len, feature_dimensions]), axis=1)
-
-        queue = tf.compat.v1.get_variable('queue', initializer=queue_init, trainable=False)
-
-        queue_ptr = tf.compat.v1.get_variable(
-            'queue_ptr',
-            [], initializer=tf.zeros_initializer(),
-            dtype=tf.int64, trainable=False)
-
         self.temp = 0.07
 
-        self.queue = queue
-        self.queue_ptr = queue_ptr
-
-        #self.queue = tf.zeros((1, feature_dimensions))
-        #self.queue_len = queue_len
-            
+        self.encoder = encoder 
         self.projection_head = projection_head 
-       # self.contrastive_augmenter = contrastive_augmenter 
-       # self.classification_augmenter = classification_augmenter
         self.linear_probe = linear_probe
 
         # metric function 
@@ -204,15 +223,6 @@ class MoCo(tf.keras.models.Model):
         
         self.m_encoder.set_weights(self.encoder.get_weights())
 
-
-        #self.register_buffer("queue", torch.randn(dim, K))
-        #self.queue = nn.functional.normalize(self.queue, dim=0)
-
-        #self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
-
-        #queue = tf.zeros((feature_dimensions, queue_len))
-        #self.queue = tf.math.l2_normalize(queue, axis=0)
-
         _queue = np.random.normal(size=(feature_dimensions, queue_len))
         _queue /= np.linalg.norm(_queue, axis=0)
         self.queue = self.add_weight(
@@ -225,11 +235,11 @@ class MoCo(tf.keras.models.Model):
         self.queue_ptr = tf.Variable(queue_ptr)
         self.queue_len = queue_len
 
-        for layer in self.m_encoder.layers:
-            layer.trainable = False  
+        #for layer in self.m_encoder.layers:
+         #   layer.trainable = False  
 
-        for layer in self.m_projection_head.layers:
-            layer.trainable = False        
+        #for layer in self.m_projection_head.layers:
+         #   layer.trainable = False        
 
 
     def _dequeue_and_enqueue(self, keys):
@@ -325,15 +335,17 @@ class MoCo(tf.keras.models.Model):
             q_feat = tf.math.l2_normalize(q_feat, axis=1)
 
             # shuffling the batch before encoding(key)
-            im_k, idx_unshuffle = self.batch_shuffle(x_k)
-            key_feat = self.m_encoder(im_k)
+           # im_k, idx_unshuffle = self.batch_shuffle(x_k)
+            key_feat = self.m_encoder(x_k)
             key_feat = tf.math.l2_normalize(key_feat, axis=1)  # NxC
 
             # unshuffling the batch after encoding(key)
-            key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
+            #key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
 
             # infonce loss
             loss, labels, logits = self.con_loss(q_feat, key_feat, batch_size)
+
+        print(logits.shape, labels.shape, "shapes")
         
         # dequeue and enqueue
         self._dequeue_and_enqueue(key_feat)
@@ -437,7 +449,7 @@ class MoCo(tf.keras.models.Model):
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         loss = tf.reduce_mean(loss, name='xentropy-loss')
 
-        return loss, labesl, logits
+        return loss, labels, logits
 
     def _momentum_update_key_encoder(self):
         """
