@@ -17,7 +17,7 @@ Linear probing accuracy: linear probing is a popular metric to evaluate self-sup
 class SimCLR(tf.keras.models.Model):
     
     def __init__(self, encoder, projection_head, linear_probe, **kwargs):
-        super(SimCLR, self).__init__(**kwargs)
+        super(SimCLR, self).__init__(dynamic=True, **kwargs)
         self.encoder = encoder 
         self.projection_head = projection_head 
         self.linear_probe = linear_probe
@@ -82,7 +82,7 @@ class SimCLR(tf.keras.models.Model):
         xi = inputs['query']
         xj = inputs['key']
 
-        batch_size = 100
+        batch_size = xi.shape[0]
 
         with tf.GradientTape() as tape:
             # embedding representation
@@ -97,18 +97,17 @@ class SimCLR(tf.keras.models.Model):
             zi = tf.math.l2_normalize(zi, axis=1)
             zj = tf.math.l2_normalize(zj, axis=1)
 
-            contrastive_loss, labels, logits = self.con_loss(zi, zj, batch_size)
-
-        print(contrastive_loss.shape, labels.shape, logits.shape)
+            loss, labels, logits = self._loss(zi, zj, batch_size)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
+        trainable_params = encoder_params + proj_head_params
 
-        grads = tape.gradient(contrastive_loss, encoder_params + proj_head_params)
+        grads = tape.gradient(loss, trainable_params)
 
         self.contrastive_optimizer.apply_gradients(
             zip(
                 grads,
-                encoder_params + proj_head_params,
+                trainable_params,
             )
         )
 
@@ -117,69 +116,34 @@ class SimCLR(tf.keras.models.Model):
 
         accs = [metric.update_state(labels, logits) for metric in self.acc_metrics]
 
-        #[metric.update_state(labels, n_logits) for metric in self.acc_metrics]
+        # for probe layer (lncls model parallel computation)
+        """
+        preprocessed_images = self.classification_augmenter(labeled_X)
+        with tf.GradientTape() as tape:
+            features = self.encoder(preprocessed_images)
+            class_logits = self.linear_probe(features)
+            probe_loss = self.probe_loss(labeled_y, class_logits)
+        gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
 
-        # probe layer
-        #preprocessed_images = self.classification_augmenter(labeled_X)
-        #with tf.GradientTape() as tape:
-         #   features = self.encoder(preprocessed_images)
-         #   class_logits = self.linear_probe(features)
-         #   probe_loss = self.probe_loss(labeled_y, class_logits)
-        #gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
+        self.probe_optimizer.apply_gradients(
+            zip(gradients, self.linear_probe.trainable_weights)
+        )
+        self.probe_accuracy.update_state(labeled_y, class_logits)
 
-       # self.probe_optimizer.apply_gradients(
-        #    zip(gradients, self.linear_probe.trainable_weights)
-        #)
-        #self.probe_accuracy.update_state(labeled_y, class_logits)
+        """
 
         results = {m.name: m.result() for m in self.acc_metrics}
 
         results.update(
             {
-            "c_loss": contrastive_loss,
-            "c_acc": self.contrastive_accuracy.result(),
-            "r_acc": self.correlation_accuracy.result(),
-            #   "p_loss": probe_loss,
-            "p_acc": self.probe_accuracy.result(),
-
+                "c_loss": loss,
+                "c_acc": self.contrastive_accuracy.result(),
+                "r_acc": self.correlation_accuracy.result(),
+                #"p_acc": self.probe_accuracy.result(),
             }
         ) 
 
         return results
-
-    def con_loss(self, zis, zjs, batch_size):
-        # calculate the positive samples similarities
-        l_pos = sim_func_dim1(zis, zjs)
-        negative_mask = get_negative_mask(batch_size)
-
-        l_pos = tf.reshape(l_pos, (batch_size, 1))
-        l_pos /= 0.07
-        # assert l_pos.shape == (config['batch_size'], 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
-
-        # combine all the zis and zijs and consider as negatives 
-        negatives = tf.concat([zjs, zis], axis=0)
-
-        loss = 0
-
-        for positives in [zis, zjs]:
-            l_neg = sim_func_dim2(positives, negatives)
-
-            labels = tf.zeros(batch_size, dtype=tf.int64)
-
-            l_neg = tf.boolean_mask(l_neg, negative_mask)
-            l_neg = tf.reshape(l_neg, (batch_size, -1))
-            l_neg /= 0.07
-
-            # assert l_neg.shape == (
-            #     config['batch_size'], 2 * (config['batch_size'] - 1)), "Shape of negatives not expected." + str(
-            #     l_neg.shape)
-            logits = tf.concat([l_pos, l_neg], axis=1)  # [N, K+1]
-            loss += tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
-        
-        loss = loss / (2 * batch_size)
-
-        return loss, labels, logits
-
 
     def test_step(self, inputs):
         labeled_images, labels = inputs
@@ -193,6 +157,41 @@ class SimCLR(tf.keras.models.Model):
 
         self.probe_accuracy.update_state(labels, class_logits)
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
+
+    def _loss(self, zis, zjs, batch_size):
+        criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
+                                                                        reduction=tf.keras.losses.Reduction.SUM)
+        # calculate the positive samples similarities
+        l_pos = sim_func_dim1(zis, zjs)
+        negative_mask = get_negative_mask(batch_size)
+
+        l_pos = tf.reshape(l_pos, (batch_size, 1))
+        l_pos /= 0.07
+        assert l_pos.shape == (batch_size, 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
+
+        # combine all the zis and zijs and consider as negatives 
+        negatives = tf.concat([zjs, zis], axis=0)
+
+        loss = 0
+        for positives in [zis, zjs]:
+            l_neg = sim_func_dim2(positives, negatives)
+
+            labels = tf.zeros(batch_size, dtype=tf.int64)
+
+            l_neg = tf.boolean_mask(l_neg, negative_mask)
+            l_neg = tf.reshape(l_neg, (batch_size, -1))
+            l_neg /= 0.07
+
+            assert l_neg.shape == (
+                 batch_size, 2 * (batch_size - 1)), "Shape of negatives not expected." + str(
+                 l_neg.shape)
+
+            logits = tf.concat([l_pos, l_neg], axis=1)  # [N, K+1]
+            loss += criterion(y_pred=logits, y_true=labels)
+        
+        loss = loss / (2 * batch_size)
+
+        return loss, labels, logits
 
 
 class MoCo(tf.keras.models.Model):
@@ -330,11 +329,14 @@ class MoCo(tf.keras.models.Model):
 
         batch_size = x_q.shape[0]
 
+        print(batch_size, x_q.shape)
+
         self._momentum_update_key_encoder()
 
         with tf.GradientTape() as tape:
             # embedding representation
             q_feat = self.encoder(x_q)
+            print(q_feat.shape)
             q_feat = tf.math.l2_normalize(q_feat, axis=1)
 
             # shuffling the batch before encoding(key)
@@ -452,6 +454,7 @@ class MoCo(tf.keras.models.Model):
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         loss = tf.reduce_mean(loss, name='xentropy-loss')
 
+        print(labels.shape, q_feat.shape)
         return loss, labels, logits
 
     def _momentum_update_key_encoder(self):

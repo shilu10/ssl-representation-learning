@@ -151,7 +151,7 @@ class DataLoader:
 
         dataset = dataset.interleave(self.parse_file, num_parallel_calls=AUTO)
         dataset = dataset.map(self.prepare_images, num_parallel_calls=AUTO)
-        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.batch(self.batch_size, drop_remainder=True)
         dataset = dataset.prefetch(AUTO)
 
         return dataset 
