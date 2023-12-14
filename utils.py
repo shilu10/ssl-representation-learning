@@ -39,7 +39,7 @@ def get_negative_mask(batch_size):
 
 
 def _cosine_simililarity_dim1(x, y):
-    v = cosine_sim_1d(x, y)
+    v = tf.abs(tf.keras.losses.cosine_similarity(x, y, axis=1))
     return v
 
 
@@ -47,7 +47,7 @@ def _cosine_simililarity_dim2(x, y):
     # x shape: (N, 1, C)
     # y shape: (1, 2N, C)
     # v shape: (N, 2N)
-    v = cosine_sim_2d(tf.expand_dims(x, 1), tf.expand_dims(y, 0))
+    v = tf.abs(tf.keras.losses.cosine_similarity(tf.expand_dims(x, 1), tf.expand_dims(y, 0), axis=2))
     return v
 
 

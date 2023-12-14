@@ -7,6 +7,9 @@ import numpy as np
 from utils import _cosine_simililarity_dim1 as sim_func_dim1, _cosine_simililarity_dim2 as sim_func_dim2
 from utils import get_negative_mask
 
+
+# https://github.com/drkostas?tab=repositories
+
 '''Contrastive accuracy: self-supervised metric, the ratio of cases in which the representation of an image is more similar to its differently augmented version's one, than to the representation of any other image in the current batch. Self-supervised metrics can be used for hyperparameter tuning even in the case when there are no labeled examples.
 Linear probing accuracy: linear probing is a popular metric to evaluate self-supervised classifiers. It is computed as the accuracy of a logistic regression classifier trained on top of the encoder's features. In our case, this is done by training a single dense layer on top of the frozen encoder. Note that contrary to traditional approach where the classifier is trained after the pretraining phase, in this example we train it during pretraining. This might slightly decrease its accuracy, but that way we can monitor its value during training, which helps with experimentation and debugging.
 '''
@@ -79,9 +82,7 @@ class SimCLR(tf.keras.models.Model):
         xi = inputs['query']
         xj = inputs['key']
 
-        batch_size = xi.shape[0]
-
-        print(batch_size, "bs")
+        batch_size = 100
 
         with tf.GradientTape() as tape:
             # embedding representation
@@ -97,6 +98,8 @@ class SimCLR(tf.keras.models.Model):
             zj = tf.math.l2_normalize(zj, axis=1)
 
             contrastive_loss, labels, logits = self.con_loss(zi, zj, batch_size)
+
+        print(contrastive_loss.shape, labels.shape, logits.shape)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
 
@@ -150,7 +153,7 @@ class SimCLR(tf.keras.models.Model):
         negative_mask = get_negative_mask(batch_size)
 
         l_pos = tf.reshape(l_pos, (batch_size, 1))
-        l_pos /= self.tau
+        l_pos /= 0.07
         # assert l_pos.shape == (config['batch_size'], 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
 
         # combine all the zis and zijs and consider as negatives 
