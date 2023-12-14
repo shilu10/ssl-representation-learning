@@ -70,7 +70,7 @@ class NTXent(tf.keras.losses.Loss):
 
         l_pos = tf.reshape(l_pos, (self.batch_size, 1))
         l_pos /= self.tau
-        # assert l_pos.shape == (config['batch_size'], 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
+        assert l_pos.shape == (self.batch_size, 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
 
         # combine all the zis and zijs and consider as negatives 
         negatives = tf.concat([zjs, zis], axis=0)
@@ -86,16 +86,14 @@ class NTXent(tf.keras.losses.Loss):
             l_neg = tf.reshape(l_neg, (self.batch_size, -1))
             l_neg /= self.tau
 
-            # assert l_neg.shape == (
-            #     config['batch_size'], 2 * (config['batch_size'] - 1)), "Shape of negatives not expected." + str(
-            #     l_neg.shape)
+            assert l_neg.shape == (
+                 self.batch_size, 2 * (self.batch_size - 1)), "Shape of negatives not expected." + str(
+                 l_neg.shape)
+
             logits = tf.concat([l_pos, l_neg], axis=1)  # [N, K+1]
             loss += self.criterion(y_pred=logits, y_true=labels)
         
         loss = loss / (2 * self.batch_size)
-
-        #self.logits = logits
-        #self.labels = labels
 
         return loss
 
