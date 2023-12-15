@@ -7,8 +7,8 @@ from argparse import ArgumentParser
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # suppress info-level logs 
 from tensorflow.keras.layers.experimental import preprocessing
 
-#from dataloader import prepare_dataset
-#from augmentations import RandomResizedCrop, RandomColorJitter, RandomColorDisortion, GaussianBlur
+from dataloader import prepare_dataset
+from augment import RandomResizedCrop, RandomColorJitter, RandomColorDisortion, GaussianBlur
 from models import SimCLR, MoCo
 from losses import NTXent, InfoNCE
 from helper import get_args, get_encoder, get_logger
@@ -102,6 +102,21 @@ def main(args):
     ###################
     # model
     ###################
+
+    contrastive_augmenter = tf.keras.Sequential(
+                [
+                    tf.keras.layers.Input(shape=(96, 96, 3)),
+                    preprocessing.Rescaling(1 / 255),
+                    preprocessing.RandomFlip("horizontal"),
+                    RandomResizedCrop(scale=(0.2, 1.0), ratio=(3 / 4, 4 / 3)),
+                    RandomColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
+                ],
+                name="contrastive_augmenter",
+            )
+
+    #batch_size, train_dataset, labeled_train_dataset, test_dataset = prepare_dataset(
+     #   1000
+    #)
     
     if args.model_type == 'simclr':
         contrastive_loss = NTXent(batch_size=args.batch_size)
@@ -116,7 +131,8 @@ def main(args):
         model = MoCo(
             encoder = encoder,
             projection_head = projection_head,
-            linear_probe = None
+            linear_probe = None,
+            contrastive_augmenter=contrastive_augmenter
         )
 
     model.compile(
@@ -135,6 +151,7 @@ def main(args):
                         initial_epoch=initial_epoch,
                         callbacks=[tb_callback, model_checkpoint_callback], 
                         steps_per_epoch=steps_per_epoch)
+    
 
 
 if __name__ == '__main__':
