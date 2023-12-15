@@ -198,11 +198,10 @@ class SimCLR(tf.keras.models.Model):
 class MoCo(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
     def __init__(self, encoder, projection_head,
-         linear_probe, contrastive_augmenter, m=0.999, queue_len=6500, **kwargs):
+         linear_probe, m=0.999, queue_len=6500, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
         self.m = m
-        self.contrastive_augmenter = contrastive_augmenter
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
         
         feature_dimensions = encoder.output_shape[1]
@@ -317,17 +316,6 @@ class MoCo(tf.keras.models.Model):
 
     def train_step(self, inputs):
         
-        # unlabeled images and labeled images
-        #unlabeled, labeled = inputs
-
-        #unlabeled_X, _ = unlabeled
-
-        # combining both labeled and unlabeled images
-        #X = tf.concat([unlabeled_X, labeled_X], axis=0)
-        
-        #x_q = self.contrastive_augmenter(unlabeled_X) 
-        #x_k = self.contrastive_augmenter(unlabeled_X)
-
         x_q = inputs['query']
         x_k = inputs['key']
 
