@@ -29,6 +29,8 @@ class SimCLR(tf.keras.models.Model):
 
         # loss function
         self.probe_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
+                                                                        reduction=tf.keras.losses.Reduction.SUM)
          
     def compile(self, contrastive_optimizer,
                  probe_optimizer, contrastive_loss, metrics, **kwargs):
@@ -159,8 +161,7 @@ class SimCLR(tf.keras.models.Model):
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
 
     def _loss(self, zis, zjs, batch_size):
-        criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
-                                                                        reduction=tf.keras.losses.Reduction.SUM)
+        
         # calculate the positive samples similarities
         l_pos = sim_func_dim1(zis, zjs)
         negative_mask = get_negative_mask(batch_size)
@@ -187,7 +188,7 @@ class SimCLR(tf.keras.models.Model):
                  l_neg.shape)
 
             logits = tf.concat([l_pos, l_neg], axis=1)  # [N, K+1]
-            loss += criterion(y_pred=logits, y_true=labels)
+            loss += self.criterion(y_pred=logits, y_true=labels)
         
         loss = loss / (2 * batch_size)
 
@@ -197,11 +198,11 @@ class SimCLR(tf.keras.models.Model):
 class MoCo(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
     def __init__(self, encoder, projection_head,
-         linear_probe, m=0.999, queue_len=65000, **kwargs):
+         linear_probe, contrastive_augmenter, m=0.999, queue_len=6500, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
-       # hvd.init()
         self.m = m
+        self.contrastive_augmenter = contrastive_augmenter
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
         
         feature_dimensions = encoder.output_shape[1]
@@ -237,11 +238,11 @@ class MoCo(tf.keras.models.Model):
         self.queue_ptr = tf.Variable(queue_ptr)
         self.queue_len = queue_len
 
-        #for layer in self.m_encoder.layers:
-         #   layer.trainable = False  
+        for layer in self.m_encoder.layers:
+            layer.trainable = False  
 
-        #for layer in self.m_projection_head.layers:
-         #   layer.trainable = False        
+        for layer in self.m_projection_head.layers:
+            layer.trainable = False        
 
 
     def _dequeue_and_enqueue(self, keys):
@@ -317,54 +318,54 @@ class MoCo(tf.keras.models.Model):
     def train_step(self, inputs):
         
         # unlabeled images and labeled images
-        #(unlabeled_X, _), (labeled_X, labeled_y) = inputs
-        
+        #unlabeled, labeled = inputs
+
+        #unlabeled_X, _ = unlabeled
+
         # combining both labeled and unlabeled images
         #X = tf.concat([unlabeled_X, labeled_X], axis=0)
         
-        #x_q = self.contrastive_augmenter(X) 
-        #x_k = self.contrastive_augmenter(X)
+        #x_q = self.contrastive_augmenter(unlabeled_X) 
+        #x_k = self.contrastive_augmenter(unlabeled_X)
+
         x_q = inputs['query']
         x_k = inputs['key']
 
         batch_size = x_q.shape[0]
 
-        print(batch_size, x_q.shape)
-
-        self._momentum_update_key_encoder()
-
         with tf.GradientTape() as tape:
             # embedding representation
             q_feat = self.encoder(x_q)
-            print(q_feat.shape)
+            #q_feat = self.projection_head(q_feat)
             q_feat = tf.math.l2_normalize(q_feat, axis=1)
 
             # shuffling the batch before encoding(key)
-           # im_k, idx_unshuffle = self.batch_shuffle(x_k)
-            key_feat = self.m_encoder(x_k)
+            im_k, idx_unshuffle = self.batch_shuffle(x_k)
+            key_feat = self.m_encoder(im_k)
+            # key_feat = self.m_projection_head(key_feat)
             key_feat = tf.math.l2_normalize(key_feat, axis=1)  # NxC
 
             # unshuffling the batch after encoding(key)
-            #key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
+            key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
 
             # infonce loss
             loss, labels, logits = self.con_loss(q_feat, key_feat, batch_size)
 
-        print(logits.shape, labels.shape, "shapes")
-        
         # dequeue and enqueue
         self._dequeue_and_enqueue(key_feat)
 
-        #encoder_params, projection_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
-        encoder_params = self.encoder.trainable_weights
+        encoder_params, projection_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
+        #encoder_params = self.encoder.trainable_weights
+
+        trainable_params = encoder_params #+ projection_head_params
 
         #grads = tape.gradient(loss, encoder_params + projection_head_params)
-        grads = tape.gradient(loss, encoder_params)
+        grads = tape.gradient(loss, trainable_params)
 
         self.contrastive_optimizer.apply_gradients(
             zip(
                 grads,
-                encoder_params #+ projection_head_params,
+                trainable_params
             )
         )
 
@@ -373,44 +374,24 @@ class MoCo(tf.keras.models.Model):
 
         accs = [metric.update_state(labels, logits) for metric in self.acc_metrics]
 
+        self._momentum_update_key_encoder()
+
         # probe layer
-        #preprocessed_images = self.classification_augmenter(labeled_X)
-        #with tf.GradientTape() as tape:
-         #   features = self.encoder(preprocessed_images)
-         #   class_logits = self.linear_probe(features)
-          #  probe_loss = self.probe_loss(labeled_y, class_logits)
+        """
+        preprocessed_images = self.classification_augmenter(labeled_X)
+        with tf.GradientTape() as tape:
+            features = self.encoder(preprocessed_images)
+            class_logits = self.linear_probe(features)
+            probe_loss = self.probe_loss(labeled_y, class_logits)
         
-        #gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
+        gradients = tape.gradient(probe_loss, self.linear_probe.trainable_weights)
 
-        #self.probe_optimizer.apply_gradients(
-        #    zip(gradients, self.linear_probe.trainable_weights)
-        #)
-        #self.probe_accuracy.update_state(labeled_y, class_logits)
-
-
-        # the momentum networks are updated by exponential moving average
-       # encoder_weights = self.encoder.weights
-        #mom_encoder_weights = self.m_encoder.weights
-
-        #for indx in range(len(encoder_weights)):
-         #   weight = encoder_weights[indx]
-          #  m_weight = mom_encoder_weights[indx]
-
-           # mom_encoder_weights[indx] = self.m * m_weight + (1 - self.m) * weight
-
-        #self.m_encoder.set_weights(mom_encoder_weights)
-
-        #for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
-         #   m_weight.assign(
-                
-          #  )
-        #for weight, m_weight in zip(
-         #   self.projection_head.weights, self.m_projection_head.weights
-        #):
-         #   m_weight.assign(
-          #      self.m * m_weight + (1 - self.m) * weight
-           # )
-
+        self.probe_optimizer.apply_gradients(
+            zip(gradients, self.linear_probe.trainable_weights)
+        )
+        self.probe_accuracy.update_state(labeled_y, class_logits)
+        """
+        #results = {}
         results = {m.name: m.result() for m in self.acc_metrics}
 
         results.update({
@@ -454,7 +435,6 @@ class MoCo(tf.keras.models.Model):
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         loss = tf.reduce_mean(loss, name='xentropy-loss')
 
-        print(labels.shape, q_feat.shape)
         return loss, labels, logits
 
     def _momentum_update_key_encoder(self):
@@ -462,6 +442,7 @@ class MoCo(tf.keras.models.Model):
         Momentum update of the key encoder
         """
         # the momentum networks are updated by exponential moving average
+        """
         encoder_weights = self.encoder.weights
         mom_encoder_weights = self.m_encoder.weights
 
@@ -472,3 +453,15 @@ class MoCo(tf.keras.models.Model):
             mom_encoder_weights[indx] = self.m * m_weight + (1 - self.m) * weight
 
         self.m_encoder.set_weights(mom_encoder_weights)
+        """
+        for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
+            m_weight.assign(
+                self.m * m_weight + (1 - self.m) * weight
+            )
+
+        for weight, m_weight in zip(
+            self.projection_head.weights, self.m_projection_head.weights
+        ):
+            m_weight.assign(
+                self.m * m_weight + (1 - self.m) * weight
+            )
