@@ -9,9 +9,9 @@ from tensorflow.keras.layers.experimental import preprocessing
 
 from dataloader import prepare_dataset
 from augment import RandomResizedCrop, RandomColorJitter, RandomColorDisortion, GaussianBlur
-from models import SimCLR, MoCo
+from models import SimCLR, MoCo, PIRL
 from losses import NTXent, InfoNCE
-from helper import get_args, get_encoder, get_logger
+from helper import get_args, get_encoder, get_logger, CNN
 from dataloader import DataLoader
 from utils import set_seed, search_same, get_session
 
@@ -114,16 +114,11 @@ def main(args):
                 name="contrastive_augmenter",
             )
 
-    #batch_size, train_dataset, labeled_train_dataset, test_dataset = prepare_dataset(
-     #   1000
-    #)
-    
     if args.model_type == 'simclr':
         contrastive_loss = NTXent(batch_size=args.batch_size)
         model = SimCLR(
             encoder = encoder,
             projection_head = projection_head,
-            linear_probe = None
         )
 
     elif args.model_type == "mocov1":
@@ -131,8 +126,13 @@ def main(args):
         model = MoCo(
             encoder = encoder,
             projection_head = projection_head,
-            linear_probe = None,
-            contrastive_augmenter=contrastive_augmenter
+            version=args.model_type
+        )
+
+    elif args.model_type == "pirl":
+        encoder = CNN(image_shape=(96, 96, 3), output_dim=128)
+        model = PIRL(
+            encoder = encoder 
         )
 
     model.compile(
