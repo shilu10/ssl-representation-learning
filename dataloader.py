@@ -120,6 +120,16 @@ class DataLoader:
             labels = tf.one_hot(label, self.args.classes)
             return (inputs, labels)
 
+    def prepare_images_pirl(self, value, indices):
+        shape = tf.image.extract_jpeg_shape(value)
+
+        img = tf.io.decode_jpeg(value, channels=3)
+
+        original, transformed = jigsaw(img)
+        inputs = {'original': original, 'transformed': transformed}
+
+        return inputs, indices
+
     def prepare_files(self, mode='unlabeled'):
         if mode == 'unlabeled':
             datapath = self.args.unlabeled_datapath
@@ -157,7 +167,12 @@ class DataLoader:
 
 
         dataset = dataset.interleave(self.parse_file, num_parallel_calls=AUTO)
-        dataset = dataset.map(self.prepare_images, num_parallel_calls=AUTO)
+
+        if self.args.model_type == "pirl":
+            dataset = dataset.map(self.prepare_images_pirl, num_parallel_calls=AUTO)
+        else:
+            dataset = dataset.map(self.prepare_images, num_parallel_calls=AUTO)
+            
         dataset = dataset.batch(self.batch_size, drop_remainder=True)
         dataset = dataset.prefetch(AUTO)
 
