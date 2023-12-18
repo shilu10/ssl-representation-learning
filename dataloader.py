@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from augment import Augment 
+from augment import Augment, jigsaw
 import imutils 
 from imutils import paths
 import os, sys, shutil
@@ -76,10 +76,16 @@ class DataLoader:
                     elif model_type == 'mocov2':
                         aug_img = self.augmenter._augment_mocov2(image, shape)
 
+
                     augmented_images.append(aug_img)
 
                 except Exception as err:
                     print(err)
+
+            if model_type == "pirl":
+                img, aug_img = jigsaw(image)
+
+                return (img, aug_img)
 
             return augmented_images
 
@@ -99,7 +105,8 @@ class DataLoader:
     def prepare_images(self, value, label=None):
         shape = tf.image.extract_jpeg_shape(value)
         #shape = tf.shape(value)
-        img = tf.io.decode_png(value, channels=3)
+        img = tf.io.decode_jpeg(value, channels=3)
+
         if label is None:
             # moco
             query, key = self.augmentation(img, shape)

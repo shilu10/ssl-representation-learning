@@ -355,3 +355,25 @@ class Augment:
         if tf.less(tf.random.uniform(shape=[], minval=0, maxval=1, dtype=tf.float32), tf.cast(p, tf.float32)):
             x = tfa.image.gaussian_filter2d(x, filter_shape=(radius, radius))
         return x
+
+
+def jigsaw(img):
+    
+    img = tf.image.resize(img, (225, 225), method='bilinear')
+
+    imgclips = []
+    for i in range(3):
+        for j in range(3):
+            clip = img[i * 75: (i + 1) * 75, j * 75: (j + 1) * 75, :]
+            randomx = tf.experimental.numpy.random.randint(0, 10)
+            randomy = tf.experimental.numpy.random.randint(0, 10)
+            clip = clip[randomx: randomx+64, randomy:randomy+64, :]
+
+            imgclips.append(clip)
+
+    imgclips = [imgclips[item] for item in tf.range(9)]
+    imgclips = tf.convert_to_tensor(imgclips)
+    imgclips = tf.random.shuffle(imgclips)
+   # imgclips /=255.0
+    
+    return img, imgclips
