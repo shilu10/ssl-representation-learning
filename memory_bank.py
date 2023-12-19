@@ -1,6 +1,18 @@
-import tensorflow as tf 
-from tensorflow import keras 
-import numpy as np 
+import tensorflow as tf
+from tensorflow import keras
+import numpy as np
+import os, sys, collections
+import collections
+import datetime
+import os
+import random
+import shutil
+import sys
+import time
+
+import numpy as np
+import torch
+from PIL import Image
 
 
 class MemoryBank(object):
@@ -10,22 +22,26 @@ class MemoryBank(object):
         self.weighted_count = 0
         self.weight = weight
 
-    def initialize(self, net, train_loader):
+    def initialize(self, net, train_loader, steps_per_epoch):
         self.update_weighted_count()
         print('Saving representations to memory')
-        bar = Progbar(len(train_loader), stateful_metrics=[])
+        bar = Progbar(steps_per_epoch, stateful_metrics=[])
         for step, batch in enumerate(train_loader):
 
-        	data, indices = batch
-            
-            images = data['original']
-            output = net(images=images)
+          data, indices = batch
+          images = data['query']
 
-            self.weighted_sum[indices, :] = output.numpy()
-            self.memory[indices, :] = self.weighted_sum[indices, :]
-            bar.update(step, values=[])
+          output = net(images)
+          self.weighted_sum[indices, :] = output.numpy()
+          self.memory[indices, :] = self.weighted_sum[indices, :]
+          bar.update(step, values=[])
+
+          if step == steps_per_epoch:
+            break
 
     def update(self, index, values):
+        index = index.numpy()
+        values = values.numpy()
         self.weighted_sum[index, :] = values + (1 - self.weight) * self.weighted_sum[index, :]
         self.memory[index, :] = self.weighted_sum[index, :]/self.weighted_count
         pass
@@ -34,8 +50,9 @@ class MemoryBank(object):
         self.weighted_count = 1 + (1 - self.weight) * self.weighted_count
 
     def return_random(self, size, index):
-        if isinstance(index, torch.Tensor):
-            index = index.tolist()
+        if isinstance(index, tf.Tensor):
+            index = index.numpy()
+        
         #allowed = [x for x in range(2000) if x not in index]
         allowed = [x for x in range(index[0])] + [x for x in range(index[0] + 1, 2000)]
         index = random.sample(allowed, size)
@@ -43,7 +60,7 @@ class MemoryBank(object):
 
     def return_representations(self, index):
         if isinstance(index, tf.Tensor):
-            index = index.tolist()
+            index = index.numpy()
         return tf.convert_to_tensor(self.memory[index, :])
 
 
