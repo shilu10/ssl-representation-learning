@@ -449,72 +449,20 @@ class MoCo(tf.keras.models.Model):
 
 class PIRL(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
-    def __init__(self, encoder, projection_head, m=0.999, queue_len=6500, **kwargs):
+    def __init__(self, encoder, f, g, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
-        self.m = m
+        self.g = g
+        self.f = f
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
         
         self.temp = 0.07
 
         self.encoder = encoder 
-        self.projection_head = projection_head 
 
         # metric function 
         self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-
-        # loss function
-        self.probe_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-
-        # the momentum networks are initialized from their online counterparts
-        self.m_encoder = keras.models.clone_model(self.encoder)
-        self.m_projection_head = keras.models.clone_model(self.projection_head)
-        
-        self.m_encoder.set_weights(self.encoder.get_weights())
-
-        _queue = np.random.normal(size=(feature_dimensions, queue_len))
-        _queue /= np.linalg.norm(_queue, axis=0)
-        self.queue = self.add_weight(
-            name='queue',
-            shape=(feature_dimensions, queue_len),
-            initializer=tf.keras.initializers.Constant(_queue),
-            trainable=False)
-
-        queue_ptr = tf.zeros((1, ), dtype=tf.int32)
-        self.queue_ptr = tf.Variable(queue_ptr)
-        self.queue_len = queue_len
-
-        for layer in self.m_encoder.layers:
-            layer.trainable = False  
-
-        for layer in self.m_projection_head.layers:
-            layer.trainable = False        
-
-
-    def _dequeue_and_enqueue(self, keys):
-        # batch size
-        batch_size = keys.shape[0]
-        ptr = int(self.queue_ptr)
-
-        # replace the keys at ptr (dequeue and enqueue)
-        self.queue[:, ptr : ptr + batch_size].assign(tf.transpose(keys)) 
-        ptr = (ptr + batch_size) % self.queue_len  # move pointer
-
-        self.queue_ptr[0].assign(ptr) 
-
-    def batch_shuffle(self, tensor):  # nx...
-        batch_size = tf.shape(tensor)[0]
-        inds = tf.range(batch_size)
-        idx_shuffle = tf.random.shuffle(inds)
-        
-        idx_unshuffle = tf.argsort(idx_shuffle)
-
-        return tf.gather(tensor, idx_shuffle), idx_unshuffle
-
-    def batch_unshuffle(self, key_feat, idx_unshuffle):
-        batch_size = tf.shape(key_feat)[0]
-        return tf.gather(key_feat, idx_unshuffle)   
+        self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()  
 
     def compile(self, contrastive_optimizer,
                  probe_optimizer, contrastive_loss, metrics, **kwargs):
@@ -563,10 +511,11 @@ class PIRL(tf.keras.models.Model):
 
     def train_step(self, inputs):
         
-        x_q = inputs['query']
-        x_k = inputs['key']
+        original = inputs['original']
+        transformed = inputs['transformed']
 
         batch_size = x_q.shape[0]
+        transformed = tf.concat([*transformed], axis=0)
 
         with tf.GradientTape() as tape:
             # embedding representation
