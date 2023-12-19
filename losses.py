@@ -111,4 +111,117 @@ class InfoNCE(tf.keras.losses.Loss):
         return loss 
 
 
+class NCE(tf.keras.losses.Loss):
+    def __init__(self, t, **kwargs):
+        super(NCE, self).__init__(**kwargs)
+        self.t = t 
+        self.cross_entropy = tf.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
+        self.cosine_similarity_dim1 = tf.keras.losses.CosineSimilarity(reduction=tf.losses.Reduction.NONE, axis=1)
+        self.cosine_similarity_dim2 = tf.keras.losses.CosineSimilarity(reduction=tf.losses.Reduction.NONE, axis=2)
 
+    def call(self, vis, negatives):
+        f_vi, g_vit = vis 
+
+        assert f_vi.shape == g_vit.shape, "Shapes do not match" + str(f_vi.shape) + ' != ' + str(g_vit.shape)
+
+        l_pos = tf.expand_dims(sim_func_dim1(f_vi, g_vit), 1)
+        l_pos /= self.t
+
+        l_neg = sim_func_dim2(tf.expand_dims(v_it, axis=1), tf.expand_dims(negatives, axis=0))
+        l_neg /= self.t
+
+        logits = tf.concat([l_pos, l_neg], axis=1)
+        labels = tf.zeros(v_i.shape[0], dtype=tf.int32)
+
+        h_loss = cross_entropy(y_true=labels, y_pred=logits)
+        return h_loss
+
+
+import torch
+import numpy as np
+import tensorflow as tf 
+
+def get_img_pair_probs(vi_batch, vi_t_batch, mn_arr, temp_parameter):
+    """
+    Returns the probability that feature representation for image I and I_t belong to same distribution.
+    :param vi_batch: Feature representation for batch of images I
+    :param vi_t_batch: Feature representation for batch containing transformed versions of I.
+    :param mn_arr: Memory bank of feature representations for negative images for current batch
+    :param temp_parameter: The temperature parameter
+    """
+
+    # Define constant eps to ensure training is not impacted if norm of any image rep is zero
+    eps = 1e-6
+
+    # L2 normalize vi, vi_t and memory bank representations
+    #vi_norm_arr = tf.normalize(vi_batch, axis=1)
+    vi_norm_arr = tf.norm(vi_batch, ord='euclidean', axis=1, keepdims=True)
+    vi_t_norm_arr = tf.norm(vi_t_batch, ord='euclidean', axis=1, keepdims=True)
+    mn_norm_arr = tf.norm(mn_arr, ord='euclidean', axis=1, keepdims=True)
+    
+
+    vi_batch = vi_batch / (vi_norm_arr + eps)
+    vi_t_batch = vi_t_batch/ (vi_t_norm_arr + eps)
+    mn_arr = mn_arr / (mn_norm_arr + eps)
+
+    # Find cosine similarities
+   # sim_vi_vi_t_arr = (vi_batch @ vi_t_batch.t()).diagonal()
+    sim_vi_vi_t_arr = tf.linalg.diag_part(vi_batch @ tf.transpose(vi_t_batch)) # positive similarity
+    sim_vi_t_mn_mat = vi_t_batch @ tf.transpose(mn_arr) # negative sim
+    
+
+    # Fine exponentiation of similarity arrays
+    #exp_sim_vi_vi_t_arr = torch.exp(sim_vi_vi_t_arr / temp_parameter)
+    #exp_sim_vi_t_mn_mat = torch.exp(sim_vi_t_mn_mat / temp_parameter)
+    exp_sim_vi_vi_t_arr = sim_vi_vi_t_arr / temp_parameter
+    exp_sim_vi_t_mn_mat = sim_vi_t_mn_mat / temp_parameter
+
+    # Sum exponential similarities of I_t with different images from memory bank of negatives
+    sum_exp_sim_vi_t_mn_arr = tf.math.reduce_sum(exp_sim_vi_t_mn_mat, axis = 1)
+
+    # Find batch probabilities arr
+    batch_prob_arr = exp_sim_vi_vi_t_arr / (exp_sim_vi_vi_t_arr + sum_exp_sim_vi_t_mn_arr + eps)
+
+    return batch_prob_arr
+
+
+def loss_pirl(img_pair_probs_arr, img_mem_rep_probs_arr):
+    """
+    Returns the average of [-log(prob(img_pair_probs_arr)) - log(prob(img_mem_rep_probs_arr))]
+    :param img_pair_probs_arr: Prob vector of batch of images I and I_t to belong to same data distribution.
+    :param img_mem_rep_probs_arr: Prob vector of batch of I and mem_bank_rep of I to belong to same data distribution
+    """
+
+    # Get 1st term of loss
+    neg_log_img_pair_probs = -1 * tf.math.log(img_pair_probs_arr)
+    loss_i_i_t = torch.sum(neg_log_img_pair_probs) / neg_log_img_pair_probs.size()[0]
+
+    # Get 2nd term of loss
+    neg_log_img_mem_rep_probs_arr = -1 * torch.log(img_mem_rep_probs_arr)
+    loss_i_mem_i = torch.sum(neg_log_img_mem_rep_probs_arr) / neg_log_img_mem_rep_probs_arr.size()[0]
+
+    loss = (loss_i_i_t + loss_i_mem_i) / 2
+
+    return  loss
+
+
+if __name__ == '__main__':
+    # Test get_img_pair_probs function
+    vi_batch = tf.random.uniform((10, 128))
+    vi_t_batch = tf.random.uniform((10, 128))
+    mn_arr = tf.random.uniform((6400, 128))
+    mem_rep_of_batch_imgs = tf.random.uniform((10, 128))
+    temp_parameter = 1.5
+
+    # Prob vector between I and I_t
+    img_pair_probs_arr = get_img_pair_probs(vi_batch, vi_t_batch, mn_arr, temp_parameter)
+    print (img_pair_probs_arr)
+
+    # Prob vector between I and mem bank representation of I
+    img_mem_rep_probs_arr = get_img_pair_probs(vi_batch, mem_rep_of_batch_imgs, mn_arr, temp_parameter)
+    print (img_mem_rep_probs_arr)
+
+    # Final loss
+    #loss_val = loss_pirl(img_pair_probs_arr, img_mem_rep_probs_arr)
+
+    #print (loss_val)
