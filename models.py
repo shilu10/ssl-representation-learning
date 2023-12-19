@@ -29,12 +29,10 @@ class SimCLR(tf.keras.models.Model):
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
                                                                         reduction=tf.keras.losses.Reduction.SUM)
          
-    def compile(self, contrastive_optimizer,
-                 probe_optimizer, contrastive_loss, metrics, **kwargs):
+    def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
-        self.probe_optimizer = probe_optimizer
-        self.contrastive_optimizer = contrastive_optimizer
-        self.contrastive_loss = contrastive_loss
+        self.optimizer = optimizer
+        self.loss = loss
         self.acc_metrics = metrics
 
     def reset_metrics(self):
@@ -102,7 +100,7 @@ class SimCLR(tf.keras.models.Model):
 
         grads = tape.gradient(loss, trainable_params)
 
-        self.contrastive_optimizer.apply_gradients(
+        self.optimizer.apply_gradients(
             zip(
                 grads,
                 trainable_params,
@@ -258,12 +256,10 @@ class MoCo(tf.keras.models.Model):
         batch_size = tf.shape(key_feat)[0]
         return tf.gather(key_feat, idx_unshuffle)   
 
-    def compile(self, contrastive_optimizer,
-                 probe_optimizer, contrastive_loss, metrics, **kwargs):
+    def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
-        self.probe_optimizer = probe_optimizer
-        self.contrastive_optimizer = contrastive_optimizer
-        self.contrastive_loss = contrastive_loss
+        self.optimizer = optimizer
+        self.loss = loss
         self.acc_metrics = metrics
 
     def reset_metrics(self):
@@ -342,7 +338,7 @@ class MoCo(tf.keras.models.Model):
 
         grads = tape.gradient(loss, trainable_params)
 
-        self.contrastive_optimizer.apply_gradients(
+        self.optimizer.apply_gradients(
             zip(
                 grads,
                 trainable_params
@@ -464,12 +460,10 @@ class PIRL(tf.keras.models.Model):
         self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
         self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()  
 
-    def compile(self, contrastive_optimizer,
-                 probe_optimizer, contrastive_loss, metrics, **kwargs):
+    def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
-        self.probe_optimizer = probe_optimizer
-        self.contrastive_optimizer = contrastive_optimizer
-        self.contrastive_loss = contrastive_loss
+        self.optimizer = probe_optimizer
+        self.loss = loss
         self.acc_metrics = metrics
 
     def reset_metrics(self):
@@ -547,7 +541,7 @@ class PIRL(tf.keras.models.Model):
         # update representation memory
         self.memory_bank.update(indices, original_image_feats.numpy())
 
-        self.contrastive_optimizer.apply_gradients(
+        self.optimizer.apply_gradients(
             zip(
                 grads,
                 trainable_params
