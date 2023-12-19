@@ -359,12 +359,12 @@ class Augment:
 
 def jigsaw(img):
     
-    img = tf.image.resize(img, (225, 225), method='bilinear')
+    copy_img = tf.image.resize(img, (225, 225), method='bilinear')
 
     imgclips = []
     for i in range(3):
         for j in range(3):
-            clip = img[i * 75: (i + 1) * 75, j * 75: (j + 1) * 75, :]
+            clip = copy_img[i * 75: (i + 1) * 75, j * 75: (j + 1) * 75, :]
             randomx = tf.experimental.numpy.random.randint(0, 10)
             randomy = tf.experimental.numpy.random.randint(0, 10)
             clip = clip[randomx: randomx+64, randomy:randomy+64, :]
