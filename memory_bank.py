@@ -11,7 +11,6 @@ import sys
 import time
 
 import numpy as np
-import torch
 from PIL import Image
 
 
@@ -29,7 +28,7 @@ class MemoryBank(object):
         for step, batch in enumerate(train_loader):
 
           data, indices = batch
-          images = data['query']
+          images = data['original']
 
           output = net(images)
           self.weighted_sum[indices, :] = output.numpy()

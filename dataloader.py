@@ -46,7 +46,6 @@ def prepare_dataset(steps_per_epoch):
     return batch_size, train_dataset, labeled_train_dataset, test_dataset
 
 
-
 class DataLoader:
     def __init__(self, args, batch_size, shuffle, num_workers):
          self.args = args 
