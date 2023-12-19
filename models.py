@@ -449,12 +449,12 @@ class MoCo(tf.keras.models.Model):
 
 class PIRL(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
-    def __init__(self, encoder, f, g, **kwargs):
+    def __init__(self, encoder, f, g, memory_bank, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
         self.g = g
         self.f = f
-        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
+        self.memory_bank = memory_bank
         
         self.temp = 0.07
 
@@ -510,41 +510,42 @@ class PIRL(tf.keras.models.Model):
         )
 
     def train_step(self, inputs):
+        data, indices = inputs
         
-        original = inputs['original']
-        transformed = inputs['transformed']
+        original = data['original']
+        transformed = data['transformed']
 
-        batch_size = x_q.shape[0]
+        batch_size = original.shape[0]
         transformed = tf.concat([*transformed], axis=0)
 
         with tf.GradientTape() as tape:
-            # embedding representation
-            q_feat = self.encoder(x_q)
-            #q_feat = self.projection_head(q_feat)
-            q_feat = tf.math.l2_normalize(q_feat, axis=1)
+            # original image feats 
+            original_image_feats = self.encoder(original)
+            original_image_feats = self.f(original_image_feats)
 
-            # shuffling the batch before encoding(key)
-            im_k, idx_unshuffle = self.batch_shuffle(x_k)
-            key_feat = self.m_encoder(im_k)
-            # key_feat = self.m_projection_head(key_feat)
-            key_feat = tf.math.l2_normalize(key_feat, axis=1)  # NxC
+            #transformed image feats
+            transformed_image_feats = self.encoder(transformed)
+            transformed_image_feats = self.g(transformed_image_feats)
 
-            # unshuffling the batch after encoding(key)
-            key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
+            mem_repr = self.memory_bank.return_representations(indices)
+            mem_arr = self.memory_bank.return_random(size=1000, index=indices)
 
-            # infonce loss
-            loss, labels, logits = self.con_loss(q_feat, key_feat, batch_size)
+            vi_vit_loss = self.get_img_pair_probs(original_image_feats, transformed_image_feats, mem_arr, self.temp)
+            vit_mem_loss = self.get_img_pair_probs(transformed_image_feats, mem_repr, mem_arr, self.temp)
 
-        # dequeue and enqueue
-        self._dequeue_and_enqueue(key_feat)
+            loss_val = self.loss_pirl(vi_vit_loss, vit_mem_loss)
 
-        encoder_params, projection_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
-        #encoder_params = self.encoder.trainable_weights
+            loss = tf.convert_to_tensor(loss_val)
 
-        trainable_params = encoder_params #+ projection_head_params
 
-        #grads = tape.gradient(loss, encoder_params + projection_head_params)
+        encoder_params, q_params, f_params = self.encoder.trainable_weights, self.q.trainable_weights, self.f.trainable_weights
+
+        trainable_params = encoder_params + q_params + f_params
+
         grads = tape.gradient(loss, trainable_params)
+
+        # update representation memory
+        self.memory_bank.update(indices, original_image_feats.numpy())
 
         self.contrastive_optimizer.apply_gradients(
             zip(
@@ -557,8 +558,6 @@ class PIRL(tf.keras.models.Model):
         self.update_correlation_accuracy(q_feat, key_feat)
 
         accs = [metric.update_state(labels, logits) for metric in self.acc_metrics]
-
-        self._momentum_update_key_encoder()
 
         # probe layer
         """
@@ -600,50 +599,66 @@ class PIRL(tf.keras.models.Model):
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
 
 
-    def con_loss(self, q_feat, key_feat, batch_size):
-        # calculating the positive similarities
-        l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
+    def get_img_pair_probs(vi_batch, vi_t_batch, mn_arr, temp_parameter):
+        """
+        Returns the probability that feature representation for image I and I_t belong to same distribution.
+        :param vi_batch: Feature representation for batch of images I
+        :param vi_t_batch: Feature representation for batch containing transformed versions of I.
+        :param mn_arr: Memory bank of feature representations for negative images for current batch
+        :param temp_parameter: The temperature parameter
+        """
 
-        # calculating the negative similarites
-        l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)  # nxK
+        # Define constant eps to ensure training is not impacted if norm of any image rep is zero
+        eps = 1e-6
+
+        # L2 normalize vi, vi_t and memory bank representations
+        #vi_norm_arr = tf.normalize(vi_batch, axis=1)
+        vi_norm_arr = tf.norm(vi_batch, ord='euclidean', axis=1, keepdims=True)
+        vi_t_norm_arr = tf.norm(vi_t_batch, ord='euclidean', axis=1, keepdims=True)
+        mn_norm_arr = tf.norm(mn_arr, ord='euclidean', axis=1, keepdims=True)
         
-        # combining l_pos and l_neg for logits
-        logits = tf.concat([l_pos, l_neg], axis=1)  # nx(1+k)
-        logits /= self.temp 
 
-        # pseduo labels
-        labels = tf.zeros(batch_size, dtype=tf.int64)  # n
+        vi_batch = vi_batch / (vi_norm_arr + eps)
+        vi_t_batch = vi_t_batch/ (vi_t_norm_arr + eps)
+        mn_arr = mn_arr / (mn_norm_arr + eps)
 
-        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
-        loss = tf.reduce_mean(loss, name='xentropy-loss')
+        # Find cosine similarities
+        # sim_vi_vi_t_arr = (vi_batch @ vi_t_batch.t()).diagonal()
+        sim_vi_vi_t_arr = tf.linalg.diag_part(vi_batch @ tf.transpose(vi_t_batch)) # positive similarity
+        sim_vi_t_mn_mat = vi_t_batch @ tf.transpose(mn_arr) # negative sim
+        
 
-        return loss, labels, logits
+        # Fine exponentiation of similarity arrays
+        #exp_sim_vi_vi_t_arr = torch.exp(sim_vi_vi_t_arr / temp_parameter)
+        #exp_sim_vi_t_mn_mat = torch.exp(sim_vi_t_mn_mat / temp_parameter)
+        exp_sim_vi_vi_t_arr = tf.math.exp(sim_vi_vi_t_arr / temp_parameter)
+        exp_sim_vi_t_mn_mat = tf.math.exp(sim_vi_t_mn_mat / temp_parameter)
 
-    def _momentum_update_key_encoder(self):
+        # Sum exponential similarities of I_t with different images from memory bank of negatives
+        sum_exp_sim_vi_t_mn_arr = tf.math.reduce_sum(exp_sim_vi_t_mn_mat, axis = 1)
+
+        # Find batch probabilities arr
+        batch_prob_arr = exp_sim_vi_vi_t_arr / (exp_sim_vi_vi_t_arr + sum_exp_sim_vi_t_mn_arr + eps)
+
+        return batch_prob_arr
+
+
+    def loss_pirl(img_pair_probs_arr, img_mem_rep_probs_arr):
         """
-        Momentum update of the key encoder
+        Returns the average of [-log(prob(img_pair_probs_arr)) - log(prob(img_mem_rep_probs_arr))]
+        :param img_pair_probs_arr: Prob vector of batch of images I and I_t to belong to same data distribution.
+        :param img_mem_rep_probs_arr: Prob vector of batch of I and mem_bank_rep of I to belong to same data distribution
         """
-        # the momentum networks are updated by exponential moving average
-        """
-        encoder_weights = self.encoder.weights
-        mom_encoder_weights = self.m_encoder.weights
 
-        for indx in range(len(encoder_weights)):
-            weight = encoder_weights[indx]
-            m_weight = mom_encoder_weights[indx]
+        # Get 1st term of loss
+        neg_log_img_pair_probs = -1 * tf.math.log(img_pair_probs_arr)
+        loss_i_i_t = tf.math.reduce_sum(neg_log_img_pair_probs) / neg_log_img_pair_probs.shape[0]
 
-            mom_encoder_weights[indx] = self.m * m_weight + (1 - self.m) * weight
+        # Get 2nd term of loss
+        neg_log_img_mem_rep_probs_arr = -1 * tf.math.log(img_mem_rep_probs_arr)
+        
+        loss_i_mem_i = tf.math.reduce_sum(neg_log_img_mem_rep_probs_arr) / neg_log_img_mem_rep_probs_arr.shape[0]
 
-        self.m_encoder.set_weights(mom_encoder_weights)
-        """
-        for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
-            m_weight.assign(
-                self.m * m_weight + (1 - self.m) * weight
-            )
+        loss = (loss_i_i_t + loss_i_mem_i) / 2
 
-        for weight, m_weight in zip(
-            self.projection_head.weights, self.m_projection_head.weights
-        ):
-            m_weight.assign(
-                self.m * m_weight + (1 - self.m) * weight
-            )
+        return  loss

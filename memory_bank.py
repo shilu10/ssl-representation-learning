@@ -21,7 +21,7 @@ class MemoryBank(object):
         self.weighted_count = 0
         self.weight = weight
 
-    def initialize(self, net, train_loader, steps_per_epoch):
+    def initialize(self, net, f, train_loader, steps_per_epoch):
         self.update_weighted_count()
         print('Saving representations to memory')
         bar = Progbar(steps_per_epoch, stateful_metrics=[])
@@ -31,6 +31,7 @@ class MemoryBank(object):
           images = data['original']
 
           output = net(images)
+          output = f(output)
           self.weighted_sum[indices, :] = output.numpy()
           self.memory[indices, :] = self.weighted_sum[indices, :]
           bar.update(step, values=[])
@@ -55,7 +56,7 @@ class MemoryBank(object):
         #allowed = [x for x in range(2000) if x not in index]
         allowed = [x for x in range(index[0])] + [x for x in range(index[0] + 1, 2000)]
         index = random.sample(allowed, size)
-        return self.memory[index, :]
+        return tf.convert_to_tensor(self.memory[index, :])
 
     def return_representations(self, index):
         if isinstance(index, tf.Tensor):

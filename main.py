@@ -14,6 +14,9 @@ from losses import NTXent, InfoNCE
 from helper import get_args, get_encoder, get_logger, CNN
 from dataloader import DataLoader
 from utils import set_seed, search_same, get_session
+from memory_bank import MemoryBank
+from pirl_task_models import JigsawTask, GenericTask, CNN
+
 
 tf.get_logger().setLevel("WARN")  # suppress info-level logs
 
@@ -51,7 +54,8 @@ def main(args):
     )
     pretraining_data_generator = loader()
     print(pretraining_data_generator)
-    steps_per_epoch = loader.num_image_files / args.batch_size
+    n_image_files = loader.num_image_files
+    steps_per_epoch = n_image_files / args.batch_size
 
     logger.info("Loaded pretraining dataloader")
     logger.info(f"Batch size: {args.batch_size}")
@@ -131,8 +135,19 @@ def main(args):
 
     elif args.model_type == "pirl":
         encoder = CNN(image_shape=(96, 96, 3), output_dim=128)
+        f = GenericTask(encoding_size=128)
+        g = JigsawTask(128, (3, 3))
+        memory_bank = MemoryBank(
+            size = len(n_image_files)
+        )
+
+        memory_bank.initialize(encoder, f, pretraining_data_generator, steps_per_epoch)
+
         model = PIRL(
-            encoder = encoder 
+            encoder = encoder,
+            g = g, 
+            f = f,
+            memory_bank=memory_bank
         )
 
     model.compile(
