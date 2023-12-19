@@ -44,7 +44,7 @@ class JigsawTask(tf.keras.models.Model):
 
 
 class GenericTask(tf.keras.models.Model):
-    def __init__(self, input_size, encoding_size):
+    def __init__(self, encoding_size):
         super(GenericTask, self).__init__()
         self.pool = tfa.layers.AdaptiveAveragePooling2D((1, 1))
         self.fc = tf.keras.Sequential(
@@ -60,4 +60,49 @@ class GenericTask(tf.keras.models.Model):
         # Input size : [B, Channels]
         x = self.fc(x)
         # Input size : [B, Encoding_size]
+        return x
+
+
+class CNN(tf.keras.Model):
+    def __init__(self, input_shape, output_dim):
+        super(CNN, self).__init__()
+        self.conv1 = tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=1, padding='same',
+                                            input_shape=input_shape)
+        self.bn1 = tf.keras.layers.BatchNormalization()
+
+        self.activation = tf.keras.layers.ReLU()
+        self.pool = tf.keras.layers.MaxPooling2D(strides=2, pool_size=2)
+
+        self.conv2 = tf.keras.layers.Conv2D(filters=32, kernel_size=3, strides=1, padding='same')
+        self.bn2 = tf.keras.layers.BatchNormalization()
+
+        self.conv3 = tf.keras.layers.Conv2D(filters=64, kernel_size=3, strides=1, padding='same')
+        self.bn3 = tf.keras.layers.BatchNormalization()
+
+        self.conv4 = tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1, padding='same')
+        self.bn4 = tf.keras.layers.BatchNormalization()
+
+
+    # @timeit
+    def call(self, x, training=False):
+        x = self.conv1(x)
+        x = self.bn1(x, training=training)
+        x = self.activation(x)
+        x = self.pool(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x, training=training)
+        x = self.activation(x)
+        x = self.pool(x)
+
+        x = self.conv3(x)
+        x = self.bn3(x, training=training)
+        x = self.activation(x)
+        x = self.pool(x)
+
+        x = self.conv4(x)
+        x = self.bn4(x, training=training)
+        x = self.activation(x)
+        x = self.pool(x)
+
         return x

@@ -4,6 +4,13 @@ import numpy as np
 import os, sys, shutil
 
 
+
+class CustomMemoryBankCallback(CSVLogger):
+    """Save averaged logs during training.
+    """
+    def on_epoch_begin(self, epoch, logs=None):
+        pass
+
 class CustomCSVLogger(CSVLogger):
     """Save averaged logs during training.
     """
