@@ -358,6 +358,11 @@ class Augment:
 
 
 def jigsaw(img):
+    mean, std = mean_std
+    img = tf.cast(img, tf.float32)
+    img /= 255.
+    img -= mean
+    img /= std
     
     copy_img = tf.image.resize(img, (225, 225), method='bilinear')
 
@@ -371,9 +376,8 @@ def jigsaw(img):
 
             imgclips.append(clip)
 
-    imgclips = [imgclips[item] for item in tf.range(9)]
     imgclips = tf.convert_to_tensor(imgclips)
     imgclips = tf.random.shuffle(imgclips)
-   # imgclips /=255.0
+
     
     return img, imgclips

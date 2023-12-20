@@ -156,6 +156,9 @@ class DataLoader:
         else:
             image_file_paths = self.prepare_files(mode='unlabeled')
             dataset = tf.data.Dataset.from_tensor_slices(image_file_paths)
+            if self.args.model_type == "pirl":
+                indices = tf.data.Dataset.from_tensor_slices(tf.range(len(image_file_paths)))
+                dataset = tf.data.Dataset.zip((dataset, indices))
 
         # for calculating steps_per_epoch
         self.num_image_files = len(image_file_paths)

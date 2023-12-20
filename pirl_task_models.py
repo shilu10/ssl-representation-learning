@@ -15,17 +15,17 @@ class JigsawTask(tf.keras.models.Model):
 
         self.encoding_size = encoding_size
         self.pool = tfa.layers.AdaptiveAveragePooling2D((1, 1))
-        self.fc1 = tf.keras.Sequential(
-                                tf.keras.layers.Dense(encoding_size, bias=False),
+        self.fc1 = tf.keras.Sequential([
+                                tf.keras.layers.Dense(encoding_size, use_bias=False),
                                 tf.keras.layers.BatchNormalization(),
-                                tf.keras.layers.Activation('leakyrelu')
-                                )
+                                tf.keras.layers.Activation('leaky_relu')
+        ])
 
-        self.fc2 = tf.keras.Sequential(
-                                tf.keras.layers.Dense(encoding_size, bias=False),
+        self.fc2 = tf.keras.Sequential([
+                                tf.keras.layers.Dense(encoding_size, use_bias=False),
                                 tf.keras.layers.BatchNormalization(),
-                                tf.keras.layers.Activation('leakyrelu')
-                                )
+                                tf.keras.layers.Activation('leaky_relu')
+        ])
     
     def call(self, x):
         B = x.shape[0]
@@ -47,11 +47,11 @@ class GenericTask(tf.keras.models.Model):
     def __init__(self, encoding_size):
         super(GenericTask, self).__init__()
         self.pool = tfa.layers.AdaptiveAveragePooling2D((1, 1))
-        self.fc = tf.keras.Sequential(
-                                tf.keras.layers.Dense(encoding_size, bias=False),
+        self.fc = tf.keras.Sequential([
+                                tf.keras.layers.Dense(encoding_size, use_bias=False),
                                 tf.keras.layers.BatchNormalization(),
-                                tf.keras.layers.Activation('leakyrelu')
-                                )
+                                tf.keras.layers.Activation('leaky_relu')
+        ])
 
     def call(self, x):
         # Input size : [B, Channels, Height, Width]
@@ -67,19 +67,22 @@ class CNN(tf.keras.Model):
     def __init__(self, input_shape, output_dim):
         super(CNN, self).__init__()
         self.conv1 = tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=1, padding='same',
-                                            input_shape=input_shape)
+                                            input_shape=input_shape, kernel_initializer='glorot_uniform')
         self.bn1 = tf.keras.layers.BatchNormalization()
 
         self.activation = tf.keras.layers.ReLU()
         self.pool = tf.keras.layers.MaxPooling2D(strides=2, pool_size=2)
 
-        self.conv2 = tf.keras.layers.Conv2D(filters=32, kernel_size=3, strides=1, padding='same')
+        self.conv2 = tf.keras.layers.Conv2D(filters=32, kernel_size=3, strides=1,
+                                             padding='same', kernel_initializer='glorot_uniform')
         self.bn2 = tf.keras.layers.BatchNormalization()
 
-        self.conv3 = tf.keras.layers.Conv2D(filters=64, kernel_size=3, strides=1, padding='same')
+        self.conv3 = tf.keras.layers.Conv2D(filters=64, kernel_size=3, strides=1, 
+                                            padding='same', kernel_initializer='glorot_uniform')
         self.bn3 = tf.keras.layers.BatchNormalization()
 
-        self.conv4 = tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1, padding='same')
+        self.conv4 = tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1, 
+                                            padding='same', kernel_initializer='glorot_uniform')
         self.bn4 = tf.keras.layers.BatchNormalization()
 
 
