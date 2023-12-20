@@ -18,8 +18,7 @@ def get_args():
 
     #parser.add_argument('--steps_per_epoch', type=int, default=200, help=)
     parser.add_argument('--width', type=int, default=128, 
-                        help="output shape of neural network, when backbone is simple cnn (not resnet50)", 
-                        choices=['simplecnn', 'resnet50'])
+                        help="output shape of neural network, when backbone is simple cnn (not resnet50)")
 
     parser.add_argument('--backbone', type=str,
                         default='resnet50',help="Type of backbone network to use as encoder, options(resnet model, simplecnn)")
@@ -89,6 +88,8 @@ def get_args():
                         default=0.4, help="Decay value to use in decay learning rate")
 
     parser.add_argument("--gpus", type=str, default='-1')
+
+    parser.add_argument('--pirl_pretext_task', type=str, default="jigsaw", choices=['jigsaw', 'rotation'])
 
     return parser.parse_args()
 

@@ -23,23 +23,27 @@ class MemoryBank:
 
         self.memory = tf.Variable(memory_initializer, trainable=False)
 
-    def initialize(self, encoder, f, train_loader, steps_per_epoch):
+    def initialize(self, encoder, f, train_loader, steps_per_epoch, sep_init=False):
 
         bar = Progbar(steps_per_epoch, stateful_metrics=[])
         for step, batch in enumerate(train_loader):
 
-          data, indices = batch
-          images = data['original']
+            if sep_init:
+                indices, images = batch 
 
-          output = encoder(images, training=False)
-          values = f(output, training=False)
+            else:
+                data, indices = batch
+                images = data['original']
 
-          self.memory = tf.tensor_scatter_nd_update(self.memory, tf.expand_dims(indices, 1), values)
-          
-          bar.update(step, values=[])
+            output = encoder(images, training=False)
+            values = f(output, training=False)
 
-          if step == steps_per_epoch:
-            break
+            self.memory = tf.tensor_scatter_nd_update(self.memory, tf.expand_dims(indices, 1), values)
+            
+            bar.update(step, values=[])
+
+            if step == steps_per_epoch:
+                break
 
     def update_memory_repr(self, indices, features):
         # perform batch update to the representations

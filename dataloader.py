@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from augment import Augment, jigsaw
+from augment import Augment, jigsaw, rotate_transform
 import imutils 
 from imutils import paths
 import os, sys, shutil
@@ -124,7 +124,12 @@ class DataLoader:
 
         img = tf.io.decode_jpeg(value, channels=3)
 
-        original, transformed = jigsaw(img)
+        if self.args.pirl_pretext_task == 'jigsaw':
+            original, transformed = jigsaw(img)
+
+        else: 
+            original, transformed = rotate_transform(img)
+
         inputs = {'original': original, 'transformed': transformed}
 
         return inputs, indices

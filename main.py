@@ -126,7 +126,12 @@ def main(args):
 
         encoder = CNN(input_shape=(96, 96, 3), output_dim=128)
         f = GenericTask(encoding_size=128)
-        g = JigsawTask(128, (3, 3))
+
+        if args.pirl_pretext_task == "jigsaw"
+            g = JigsawTask(128, (3, 3))
+
+        else:
+            g = GenericTask(encoding_size=128)
 
         memory_bank = MemoryBank(
             shape = (n_image_files, 128)
