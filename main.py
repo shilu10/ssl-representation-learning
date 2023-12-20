@@ -127,8 +127,9 @@ def main(args):
         encoder = CNN(input_shape=(96, 96, 3), output_dim=128)
         f = GenericTask(encoding_size=128)
         g = JigsawTask(128, (3, 3))
+
         memory_bank = MemoryBank(
-            size = n_image_files
+            shape = (n_image_files, 128)
         )
 
         memory_bank.initialize(encoder, f, pretraining_data_generator, steps_per_epoch)
