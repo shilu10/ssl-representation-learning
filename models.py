@@ -524,15 +524,15 @@ class PIRL(tf.keras.models.Model):
             transformed_image_feats = self.encoder(transformed)
             transformed_image_feats = self.g(transformed_image_feats)
 
-            mem_repr = self.memory_bank.return_representations(indices)
-            mem_arr = self.memory_bank.return_random(size=1000, index=indices)
+            mem_repr = self.memory_bank.sample_by_indices(indices)
+            mem_arr = self.memory_bank.sample_negatives(indices, 1000)
 
-            loss_1 = self.cal_pirl_loss(original_image_feats, transformed_image_feats, mem_arr, self.temp)
-            loss_2 = self.cal_pirl_loss(transformed_image_feats, mem_repr, mem_arr, self.temp)
+            loss_1 = self.nce_loss(mem_repr, transformed_image_feats, mem_arr, self.temp)
+            loss_2 = self.nce_loss(mem_repr, original_image_feats, mem_arr, self.temp)
 
-            loss = 0.5 * loss_1 + (1 - 0.5) * loss_2
+            loss =  tf.reduce_mean(0.5 * loss_1 + (1 - 0.5) * loss_2)
 
-            loss = tf.convert_to_tensor(loss, dtype=tf.float32)
+            del mem_arr
 
 
         encoder_params, g_params, f_params = self.encoder.trainable_weights, self.g.trainable_weights, self.f.trainable_weights
@@ -542,7 +542,7 @@ class PIRL(tf.keras.models.Model):
         grads = tape.gradient(loss, trainable_params)
 
         # update representation memory
-        self.memory_bank.update(indices, original_image_feats)
+        self.memory_bank.update_memory_repr(indices, original_image_feats)
 
         self.optimizer.apply_gradients(
             zip(
@@ -659,14 +659,16 @@ class PIRL(tf.keras.models.Model):
 
         return  loss
 
-    def cal_pirl_loss(self, vi_feat, vit_feat, mem_feat, temp):
+    def n_way_softmax(self, vi_feat, vit_feat, mem_feat, temp):
         bs = vi_feat.shape[0]
     
         pos_sim = tf.reshape(tf.einsum('nc,nc->n', vi_feat, vit_feat), (-1, 1))  # nx1 
+        pos_sim /= temp
 
         neg_sim = tf.einsum('nc,ck->nk', vit_feat, tf.transpose(mem_feat))  # nxK
+        neg_sim /= temp
 
-        logits = tf.concat([pos_sim, neg_sim], axis=-1)
+        logits = tf.concat([pos_sim, neg_sim], axis=1)
 
         labels = tf.zeros(bs, dtype=tf.int32)
 
@@ -674,3 +676,11 @@ class PIRL(tf.keras.models.Model):
         loss = tf.reduce_mean(loss, name='nce-loss')
 
         return loss
+
+    def nce_loss(self, f_vi, g_vit, negatives, temp):
+        assert f_vi.shape == g_vit.shape, "Shapes do not match" + str(f_vi.shape) + ' != ' + str(g_vit.shape)
+        #  predicted input values of 0 and 1 are undefined (hence the clip by value)
+
+        batch_size = f_vi.shape[0]
+        return self.n_way_softmax(f_vi, g_vit, negatives, temp) - tf.math.log(
+            1 - tf.math.exp(-self.n_way_softmax(g_vit, negatives[:batch_size, :], negatives, temp)))

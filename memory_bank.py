@@ -23,7 +23,7 @@ class MemoryBank:
 
         self.memory = tf.Variable(memory_initializer, trainable=False)
 
-    def init_memory_bank(self, encoder, f, train_loader, steps_per_epoch):
+    def initialize(self, encoder, f, train_loader, steps_per_epoch):
 
         bar = Progbar(steps_per_epoch, stateful_metrics=[])
         for step, batch in enumerate(train_loader):
