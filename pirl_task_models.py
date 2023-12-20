@@ -27,7 +27,7 @@ class JigsawTask(tf.keras.models.Model):
                                 tf.keras.layers.Activation('leaky_relu')
         ])
     
-    def call(self, x):
+    def call(self, x, training=False):
         B = x.shape[0]
         # Input size : [B*Jigsaw_size, Height, Width, Channels]
         x = self.pool(x)
@@ -53,7 +53,7 @@ class GenericTask(tf.keras.models.Model):
                                 tf.keras.layers.Activation('leaky_relu')
         ])
 
-    def call(self, x):
+    def call(self, x, training=False):
         # Input size : [B, Channels, Height, Width]
         x = self.pool(x)
         x = tf.squeeze(tf.squeeze(x, axis=-2), axis=-2)

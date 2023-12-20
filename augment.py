@@ -381,3 +381,23 @@ def jigsaw(img):
 
     
     return img, imgclips
+
+
+def rotate_transform(image):
+    random_angle = tf.random.uniform(shape=(), minval=0, maxval=4, dtype=tf.int32)
+    
+    mean, std = mean_std
+    image = tf.cast(image, tf.float32)
+    image /= 255.
+    image -= mean
+    image /= std
+    # label 0 --> 0 degree
+    # label 1 --> 90 degree
+    # label 2 --> 180 degree
+    # label 3 --> 270 degree
+    label = random_angle
+    image_transformed = tf.identity(image)
+    if random_angle > 0:
+        image_transformed = tf.image.rot90(image, k=random_angle)
+
+    return image, image_transformed
