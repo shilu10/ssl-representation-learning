@@ -84,8 +84,7 @@ def main(args):
     # OPTIMIZER
     #####################
 
-    contrastive_optimizer = tf.keras.optimizers.Adam()
-    probe_optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.Adam()
 
     ###################
     # CALLBACKS
@@ -107,26 +106,15 @@ def main(args):
     # model
     ###################
 
-    contrastive_augmenter = tf.keras.Sequential(
-                [
-                    tf.keras.layers.Input(shape=(96, 96, 3)),
-                    preprocessing.Rescaling(1 / 255),
-                    preprocessing.RandomFlip("horizontal"),
-                    RandomResizedCrop(scale=(0.2, 1.0), ratio=(3 / 4, 4 / 3)),
-                    RandomColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
-                ],
-                name="contrastive_augmenter",
-            )
-
     if args.model_type == 'simclr':
-        contrastive_loss = NTXent(batch_size=args.batch_size)
+        loss = NTXent(batch_size=args.batch_size)
         model = SimCLR(
             encoder = encoder,
             projection_head = projection_head,
         )
 
     elif args.model_type == "mocov1":
-        contrastive_loss = InfoNCE(temp=0.07)
+        loss = InfoNCE(temp=0.07)
         model = MoCo(
             encoder = encoder,
             projection_head = projection_head,
@@ -134,11 +122,13 @@ def main(args):
         )
 
     elif args.model_type == "pirl":
-        encoder = CNN(image_shape=(96, 96, 3), output_dim=128)
+        loss = InfoNCE(temp=0.07)
+
+        encoder = CNN(input_shape=(96, 96, 3), output_dim=128)
         f = GenericTask(encoding_size=128)
         g = JigsawTask(128, (3, 3))
         memory_bank = MemoryBank(
-            size = len(n_image_files)
+            size = n_image_files
         )
 
         memory_bank.initialize(encoder, f, pretraining_data_generator, steps_per_epoch)
@@ -151,9 +141,8 @@ def main(args):
         )
 
     model.compile(
-        contrastive_optimizer=contrastive_optimizer, 
-        probe_optimizer = probe_optimizer,
-        contrastive_loss = contrastive_loss,
+        optimizer=optimizer, 
+        loss = loss,
         metrics=[tf.keras.metrics.SparseTopKCategoricalAccuracy(1, 'acc1', dtype=tf.float32),
                 tf.keras.metrics.SparseTopKCategoricalAccuracy(5, 'acc5', dtype=tf.float32)],
     )

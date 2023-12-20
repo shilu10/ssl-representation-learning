@@ -190,7 +190,7 @@ class SimCLR(tf.keras.models.Model):
 
 class MoCo(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
-    def __init__(self, encoder, projection_head, m=0.999, queue_len=6500, version, **kwargs):
+    def __init__(self, encoder, projection_head, m=0.999, queue_len=6500, version="mocov1", **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
         self.m = m
@@ -447,7 +447,7 @@ class PIRL(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
     def __init__(self, encoder, f, g, memory_bank, **kwargs):
 
-        super(MoCo, self).__init__(dynamic=True)
+        super(PIRL, self).__init__(dynamic=True)
         self.g = g
         self.f = f
         self.memory_bank = memory_bank
@@ -460,9 +460,12 @@ class PIRL(tf.keras.models.Model):
         self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
         self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()  
 
+        # loss criterion
+        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+
     def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
-        self.optimizer = probe_optimizer
+        self.optimizer = optimizer
         self.loss = loss
         self.acc_metrics = metrics
 
@@ -524,22 +527,22 @@ class PIRL(tf.keras.models.Model):
             mem_repr = self.memory_bank.return_representations(indices)
             mem_arr = self.memory_bank.return_random(size=1000, index=indices)
 
-            vi_vit_loss = self.get_img_pair_probs(original_image_feats, transformed_image_feats, mem_arr, self.temp)
-            vit_mem_loss = self.get_img_pair_probs(transformed_image_feats, mem_repr, mem_arr, self.temp)
+            loss_1 = self.cal_pirl_loss(original_image_feats, transformed_image_feats, mem_arr, self.temp)
+            loss_2 = self.cal_pirl_loss(transformed_image_feats, mem_repr, mem_arr, self.temp)
 
-            loss_val = self.loss_pirl(vi_vit_loss, vit_mem_loss)
+            loss = 0.5 * loss_1 + (1 - 0.5) * loss_2
 
-            loss = tf.convert_to_tensor(loss_val)
+            loss = tf.convert_to_tensor(loss, dtype=tf.float32)
 
 
-        encoder_params, q_params, f_params = self.encoder.trainable_weights, self.q.trainable_weights, self.f.trainable_weights
+        encoder_params, g_params, f_params = self.encoder.trainable_weights, self.g.trainable_weights, self.f.trainable_weights
 
-        trainable_params = encoder_params + q_params + f_params
+        trainable_params = encoder_params + g_params + f_params
 
         grads = tape.gradient(loss, trainable_params)
 
         # update representation memory
-        self.memory_bank.update(indices, original_image_feats.numpy())
+        self.memory_bank.update(indices, original_image_feats)
 
         self.optimizer.apply_gradients(
             zip(
@@ -548,10 +551,10 @@ class PIRL(tf.keras.models.Model):
             )
         )
 
-        self.update_contrastive_accuracy(q_feat, key_feat)
-        self.update_correlation_accuracy(q_feat, key_feat)
+        self.update_contrastive_accuracy(original_image_feats, transformed_image_feats)
+        self.update_correlation_accuracy(original_image_feats, transformed_image_feats)
 
-        accs = [metric.update_state(labels, logits) for metric in self.acc_metrics]
+        #accs = [metric.update_state(labels, logits) for metric in self.acc_metrics]
 
         # probe layer
         """
@@ -568,8 +571,8 @@ class PIRL(tf.keras.models.Model):
         )
         self.probe_accuracy.update_state(labeled_y, class_logits)
         """
-        #results = {}
-        results = {m.name: m.result() for m in self.acc_metrics}
+        results = {}
+        #results = {m.name: m.result() for m in self.acc_metrics}
 
         results.update({
             "c_loss": loss,
@@ -593,7 +596,7 @@ class PIRL(tf.keras.models.Model):
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
 
 
-    def get_img_pair_probs(vi_batch, vi_t_batch, mn_arr, temp_parameter):
+    def get_img_pair_probs(self, vi_batch, vi_t_batch, mn_arr, temp_parameter):
         """
         Returns the probability that feature representation for image I and I_t belong to same distribution.
         :param vi_batch: Feature representation for batch of images I
@@ -617,10 +620,9 @@ class PIRL(tf.keras.models.Model):
         mn_arr = mn_arr / (mn_norm_arr + eps)
 
         # Find cosine similarities
-        # sim_vi_vi_t_arr = (vi_batch @ vi_t_batch.t()).diagonal()
-        sim_vi_vi_t_arr = tf.linalg.diag_part(vi_batch @ tf.transpose(vi_t_batch)) # positive similarity
-        sim_vi_t_mn_mat = vi_t_batch @ tf.transpose(mn_arr) # negative sim
-        
+        sim_vi_vi_t_arr = tf.reshape(tf.einsum('nc,nc->n', vi_batch, vi_t_batch), (-1, 1))  # nx1
+        #sim_vi_t_mn_mat = vi_t_batch @ tf.transpose(mn_arr) # negative sim
+        sim_vi_t_mn_mat = tf.einsum('nc,ck->nk', vi_t_batch, tf.transpose(mn_arr))  # nxK
 
         # Fine exponentiation of similarity arrays
         #exp_sim_vi_vi_t_arr = torch.exp(sim_vi_vi_t_arr / temp_parameter)
@@ -637,7 +639,7 @@ class PIRL(tf.keras.models.Model):
         return batch_prob_arr
 
 
-    def loss_pirl(img_pair_probs_arr, img_mem_rep_probs_arr):
+    def loss_pirl(self, img_pair_probs_arr, img_mem_rep_probs_arr):
         """
         Returns the average of [-log(prob(img_pair_probs_arr)) - log(prob(img_mem_rep_probs_arr))]
         :param img_pair_probs_arr: Prob vector of batch of images I and I_t to belong to same data distribution.
@@ -656,3 +658,19 @@ class PIRL(tf.keras.models.Model):
         loss = (loss_i_i_t + loss_i_mem_i) / 2
 
         return  loss
+
+    def cal_pirl_loss(self, vi_feat, vit_feat, mem_feat, temp):
+        bs = vi_feat.shape[0]
+    
+        pos_sim = tf.reshape(tf.einsum('nc,nc->n', vi_feat, vit_feat), (-1, 1))  # nx1 
+
+        neg_sim = tf.einsum('nc,ck->nk', vit_feat, tf.transpose(mem_feat))  # nxK
+
+        logits = tf.concat([pos_sim, neg_sim], axis=-1)
+
+        labels = tf.zeros(bs, dtype=tf.int32)
+
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+        loss = tf.reduce_mean(loss, name='nce-loss')
+
+        return loss
