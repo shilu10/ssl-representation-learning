@@ -127,7 +127,7 @@ def main(args):
         encoder = CNN(input_shape=(96, 96, 3), output_dim=128)
         f = GenericTask(encoding_size=128)
 
-        if args.pirl_pretext_task == "jigsaw"
+        if args.pirl_pretext_task == "jigsaw":
             g = JigsawTask(128, (3, 3))
 
         else:
@@ -143,7 +143,8 @@ def main(args):
             encoder = encoder,
             g = g, 
             f = f,
-            memory_bank=memory_bank
+            memory_bank=memory_bank,
+            pretext_task=args.pirl_pretext_task,
         )
 
     model.compile(

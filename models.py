@@ -445,12 +445,13 @@ class MoCo(tf.keras.models.Model):
 
 class PIRL(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
-    def __init__(self, encoder, f, g, memory_bank, **kwargs):
+    def __init__(self, encoder, f, g, memory_bank, pretext_task, **kwargs):
 
         super(PIRL, self).__init__(dynamic=True)
         self.g = g
         self.f = f
         self.memory_bank = memory_bank
+        self.pretext_task = pretext_task
         
         self.temp = 0.07
 
@@ -513,7 +514,9 @@ class PIRL(tf.keras.models.Model):
         transformed = data['transformed']
 
         batch_size = original.shape[0]
-        transformed = tf.concat([*transformed], axis=0)
+
+        if self.pretext_task == "jigsaw":
+            transformed = tf.concat([*transformed], axis=0)
 
         with tf.GradientTape() as tape:
             # original image feats 
