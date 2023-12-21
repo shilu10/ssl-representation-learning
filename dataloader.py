@@ -13,6 +13,7 @@ AUTO = tf.data.experimental.AUTOTUNE
 def prepare_dataset(steps_per_epoch):
     # labeled and unlabeled samples are loaded synchronously
     # with batch sizes selected accordingly
+
     unlabeled_batch_size = 100000 // steps_per_epoch
     labeled_batch_size = 5000 // steps_per_epoch
     batch_size = unlabeled_batch_size + labeled_batch_size
@@ -184,3 +185,5 @@ class DataLoader:
         dataset = dataset.prefetch(AUTO)
 
         return dataset 
+
+
