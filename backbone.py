@@ -458,6 +458,7 @@ class LinearLayer(tf.keras.models.Model):
 
     return x 
 
+
 class AlexNet(tf.keras.models.Model):
   def __init__(self, n_classes=1000, *args, **kwargs):
     super(AlexNet, self).__init__(*args, **kwargs)
