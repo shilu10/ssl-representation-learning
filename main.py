@@ -13,7 +13,7 @@ from models import SimCLR, MoCo, PIRL
 from losses import NTXent, InfoNCE
 from helper import get_args, get_encoder, get_logger, CNN
 from dataloader import DataLoader
-from utils import set_seed, search_same, get_session
+from utils import search_same, get_session
 from memory_bank import MemoryBank
 from pirl_task_models import JigsawTask, GenericTask, CNN
 
@@ -23,7 +23,6 @@ tf.get_logger().setLevel("WARN")  # suppress info-level logs
 
 def main(args):
 
-    set_seed()
     #args, initial_epoch = search_same(args)
     initial_epoch = 0
 
