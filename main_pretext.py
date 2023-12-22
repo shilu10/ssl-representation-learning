@@ -1,7 +1,7 @@
 import tensorflow as tf 
 from tensorflow.keras.utils import Progbar
 from tensorflow import keras 
-import os, sys, shutil
+import os, sys, shutil, random
 from imutils import paths 
 from tqdm import tqdm
 import numpy as np 
@@ -38,7 +38,7 @@ def parse_args():
 	parser.add_argument('--permutation_arr_path', type=str, default='permutation_max_1000.npy')
 
 	parser.add_argument('--shuffle', type=bool, default=True)
-	parser.add_argument('--grid_size', type=Union(tuple, int), default=(3, 3))
+	parser.add_argument('--grid_size', type=Union[tuple, int], default=(3, 3))
 
 	return parser.parse_args()
 
@@ -46,26 +46,31 @@ def parse_args():
 def main(args):
 	
 	# assertion errors
-	assert args.use_validation and os.path.exists(args.validation_datapath), "validation_datapath does'nt exists"
-	assert os.path.exists(os.permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
+	assert os.path.exists(args.unlabeled_datapath), f"no file or folder exists at {args.unlabeled_datapath}"
+	assert os.path.exists(args.permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
 
 	# setting specific gpu in multi-gpu workstation for cuda job.
-	if args.gpu is not None:
-		os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-		os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+	#if args.gpu is not None:
+	#	os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+	#	os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
-	else: 
-		print('CPU mode')
+	#else: 
+	#	print('CPU mode')
+
+	permutation_arr = np.load(args.permutation_arr_path)
 
 	# transformation (jigsaw or rotation)
 	jigsaw_transformation = JigSaw(args, permutation_arr)
 
 	# trainloader and val dataloader 
-	image_files = imutils.paths.list_images(args.unlabeled_datapath)
-	dummy_labels = [_ for _ in range(len(image_files))]
+	image_files = list(paths.list_images(args.unlabeled_datapath))
+	#dummy_labels = [_ for _ in range(len(image_files))]
 
 	# dataloader
-	dataset = tf.data.Dataset.from_tensor_slices((image_files, dummy_labels))
+	dataset = tf.data.Dataset.from_tensor_slices((image_files))
+	
+	indices = tf.data.Dataset.from_tensor_slices([random.randint(0, 100) for _ in range(len(image_files))])
+	dataset = tf.data.Dataset.zip((dataset, indices))
 	dataset = dataset.repeat()
 	
 	if args.shuffle:
@@ -77,7 +82,7 @@ def main(args):
 	# for parallel preprocessing
 	dataset = dataset.map(lambda x, y: preprocess_image(x, y, jigsaw_transformation))
 
-	dataset = dataset.batch(self.batch_size, drop_remainder=True)
+	dataset = dataset.batch(args.batch_size, drop_remainder=True)
 	dataset = dataset.prefetch(AUTO)
 
 	iter_per_epoch = int(len(image_files) / args.batch_size)
@@ -86,15 +91,15 @@ def main(args):
 	network = AlexNet(args.num_classes)
 
 	# optimizer
-	optimizer = tf.keras.optimizer.SGD(lr=args.lr,momentum=0.9,weight_decay = 5e-4)
+	optimizer = tf.keras.optimizers.SGD(lr=args.lr,momentum=0.9,weight_decay = 5e-4)
 
 	# criterion
-	criterion = tf.keras.losses.SparseCategoricalCrossEntropy(from_logits=True)
+	criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 	
 	# checkpoint 
 	ckpt = tf.train.Checkpoint(step=tf.Variable(1), 
 							  optimizer=optimizer, 
-							  net=network, 
+							  net=network,#)
 							  iterator=iter(dataset))
 
 	manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=3)
@@ -109,29 +114,37 @@ def main(args):
 
 	# metric trackers
 	loss_tracker = tf.keras.metrics.Mean()
-	top1_acc = tf.keras.metrics.tf.keras.metrics.TopKSparseCategoricalAccuracy(k=1, 
+	top1_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=1, 
 									name='top_k_categorical_accuracy', dtype=None)
-	top5_acc = tf.keras.metrics.tf.keras.metrics.TopKSparseCategoricalAccuracy(k=5, 
+	top5_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, 
 									name='top_k_categorical_accuracy', dtype=None)
 
 	# summary writer
-	train_log_dir = f'{args.tensorboard}/batch_level/' + datetime.now().strftime("%Y%m%d-%H%M%S") + {model_type} + '/train'
+	train_log_dir = f'{args.tensorboard}/batch_level/' + datetime.now().strftime("%Y%m%d-%H%M%S") + args.model_type + '/train'
 	train_writer = tf.summary.create_file_writer(train_log_dir)
 
 	# metrics name for progressbar
 	metrics_names = ['loss', 'top1_acc', 'top5_acc']
 
-	for epoch in rangge(args.num_epochs):
+	print(f"Steps per epoch: {iter_per_epoch}")
+
+	random.seed()
+
+	for epoch in range(args.num_epochs):
 		print("\nepoch {}/{}".format(epoch+1, args.num_epochs))
 
 		# progress bar
-		pb_i = Progbar(len(image_files), stateful_metrics=metrics_names)
+		pb_i = Progbar(iter_per_epoch, stateful_metrics=metrics_names)
 		
-		for step, batch in enumerate(dataset):
+		iter_dataset = iter(dataset)
+		for step in range(iter_per_epoch):
 			# for infinite dataset
-			if step == iter_per_epoch:
-				break
-			
+			batch = next(iter_dataset)
+
+			print(batch[0][0])
+
+			print(batch[1])
+
 			result = train(
 					network = network,
 					batch = batch,
@@ -141,6 +154,9 @@ def main(args):
 					top5_acc = top5_acc,
 					loss_tracker = loss_tracker,
 				)
+
+			if step == 2:
+				break
 
 			# batch-level summary writer
 			batch_loss = loss_tracker.result()
@@ -153,8 +169,8 @@ def main(args):
 
 			# update progress bar
 			values=[('loss', batch_loss.numpy()), ('batch_top1_acc', batch_top1_acc.numpy()), ('batch_top5_acc', batch_top5_acc.numpy())]
-        
-        	pb_i.add(args.batch_size, values=values)
+			
+			pb_i.add(args.batch_size, values=values)
 
 			# validation code goes here
 
@@ -175,37 +191,41 @@ def main(args):
 
 		# for checkpoint update
 		ckpt.step.assign_add(1)
-	    if int(ckpt.step) % 5 == 0:
-	      save_path = manager.save()
-	      print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
-	      print("loss {:1.2f}".format(epoch_loss.numpy()))
+		if int(ckpt.step) % 5 == 0:
+			save_path = manager.save()
+			print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
+			print("loss {:1.2f}".format(epoch_loss.numpy()))
 
 
 def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker):
-	
 	inputs, labels = batch 
-
+	
 	with tf.GradientTape() as tape:
 		logits = network(inputs, training=True)
 
 		# compute custom loss
-		loss = criterion(logits, labels)
+		loss = criterion(labels, logits)
 
 	# Compute gradients
-    trainable_vars = network.trainable_variables
-    gradients = tape.gradient(loss, trainable_vars)
-
-    # Update weights
-    optimizer.apply_gradients(zip(gradients, trainable_vars))
-
-    # Compute our own metrics
-    loss_tracker.update_state(loss)
-    top1_acc.update_state(logits, labels)
-    top5_acc.update_state(logits, labels)
-    
+	trainable_vars = network.trainable_variables
+	gradients = tape.gradient(loss, trainable_vars)
+	
+	# Update weights
+	optimizer.apply_gradients(zip(gradients, trainable_vars))
+	
+	# Compute our own metrics
+	loss_tracker.update_state(loss)
+	top1_acc.update_state(labels, logits)
+	top5_acc.update_state(labels, logits)
+	
 	return loss
 
 def test():
 	pass 
 
 
+
+if __name__ == '__main__':
+	args = parse_args()
+
+	main(args)

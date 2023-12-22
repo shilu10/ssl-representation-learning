@@ -387,7 +387,7 @@ class ConvLayer(tf.keras.layers.Layer):
   def __init__(self, 
               kernel_size: tuple = (3, 3), 
               filters: int = 10, 
-              strides: Union(tuple, None) = (1, 1), 
+              strides: Union[tuple, None] = (1, 1), 
               padding: str = "valid",
               groups=1,
               use_act: bool = True, 
@@ -395,30 +395,36 @@ class ConvLayer(tf.keras.layers.Layer):
               use_pooling: bool = True,
               pooling_type: str = "max",
               pool_size: tuple = (2, 2),
-              pool_strides: Union(tuple, None) = None,
-              pool_padding: str: "valid",
+              pool_strides: Union[tuple, None] = None,
+              pool_padding: str= "valid",
               *args, 
               **kwargs):
 
     super(ConvLayer, self).__init__(*args, **kwargs)
 
-      # conv
-      self.conv = tf.keras.layers.Conv2D(kernel_size=kernel_size, 
+    # conv
+    self.conv = tf.keras.layers.Conv2D(kernel_size=kernel_size, 
                                   filters=filters, padding=padding, strides=strides, groups=groups)
 
-      # activation
-      if use_act:
-        self.activation = tf.keras.layers.Activation(act_type)
+    # activation
+    if use_act:
+      self.activation = tf.keras.layers.Activation(act_type)
 
-      # pooling
-      if use_pooling:
-        if pooling_type == "max":
-          self.pooling = tf.keras.layers.MaxPooling2D(pool_size=pool_size, 
+    else:
+      self.activation = tf.identity
+
+    # pooling
+    if use_pooling:
+      if pooling_type == "max":
+        self.pooling = tf.keras.layers.MaxPooling2D(pool_size=pool_size, 
                                               padding=pool_padding, strides=pool_strides)
 
-        elif pooling_type == "avg":
-          self.pooling = tf.keras.layers.AveragePooling2D(pool_size=pool_size, 
+      elif pooling_type == "avg":
+        self.pooling = tf.keras.layers.AveragePooling2D(pool_size=pool_size, 
                                               padding=pool_padding, strides=pool_strides)
+        
+    else:
+      self.pooling = tf.identity
 
   def call(self, inputs):
     x = self.conv(inputs)
@@ -445,9 +451,15 @@ class LinearLayer(tf.keras.models.Model):
     if use_act:
       self.activation = tf.keras.layers.Activation(act_type)
 
+    else:
+      self.activation = tf.identity
+
     # dropout
     if use_dropout:
       self.dropout = tf.keras.layers.Dropout(rate=dropout_rate)
+
+    else:
+      self.dropout = tf.identity
 
 
   def call(self, inputs: tf.Tensor):
@@ -532,9 +544,9 @@ class AlexNet(tf.keras.models.Model):
 
     self.flatten = tf.keras.layers.Flatten()
 
-    self.output = tf.keras.layers.Dense(n_classes)
+    self.out = tf.keras.layers.Dense(n_classes)
 
-    def call(self, inputs, training=False):
+  def call(self, inputs, training=False):
       # B-batch, T-tile, H-height, W-width, C-channels
       B, T, H, W, C = inputs.shape 
 
@@ -564,6 +576,6 @@ class AlexNet(tf.keras.models.Model):
       x = self.linear_layer_2(x)
 
       # output layer
-      out = self.output(x)
+      out = self.out(x)
 
       return out 

@@ -126,13 +126,6 @@ def search_same(args):
     return args, initial_epoch
 
 
-def set_seed(SEED=42):
-    os.environ['PYTHONHASHSEED'] = str(SEED)
-    random.seed(SEED)
-    np.random.seed(SEED)
-    tf.random.set_seed(SEED)
-
-
 def get_session(args):
     assert int(tf.__version__.split('.')[0]) >= 2.0
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
@@ -154,10 +147,12 @@ def read_image(image_path, label):
     return tf.data.Dataset.from_tensors((raw, label))
 
 
-def preprocess_image(raw, label, tranform_obj):
-    image = tf.io.deocde_jpeg(raw)
+def preprocess_image(value, label, tranform_obj=None):
+    shape = tf.image.extract_jpeg_shape(value)
+
+    img = tf.image.decode_jpeg(value)
 
     # transformations
-    titles, perm_label, _ = tranform_obj.transform(raw)
+    titles, perm_label, _ = tranform_obj.transform(img, label)
 
-    return titles, perm_label
+    return titles, label
