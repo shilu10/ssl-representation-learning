@@ -15,7 +15,10 @@ import keras_cv
 mean_std = [[0.485, 0.456, 0.406],
             [0.229, 0.224, 0.225]]
 
-random.seed()
+tf.random.set_seed(None)
+np.random.seed(None)
+random.seed(None)
+
 
 class GaussianBlur(tf.keras.layers.Layer):
     # Implements Gaussian blur as described in the SimCLR paper
@@ -409,11 +412,16 @@ class JigSaw(object):
     def __init__(self, args, permutation_arr):
         self.args = args 
         self.permutation_arr = permutation_arr
+        self.permutation_indices = [_ for _ in range(len(permutation_arr))]
 
     def transform(self, image, label):
 
+        mean, std = mean_std
         image = tf.cast(image, tf.float32)
-        
+        image /= 255.
+        image -= mean
+        image /= std
+
         image = tf.image.resize(image, 
                                 size=(256, 256), 
                                 method=tf.image.ResizeMethod.BILINEAR)
@@ -447,10 +455,8 @@ class JigSaw(object):
         n_grid = grid_size[0] * grid_size[1]
         tiles = tf.image.random_crop(grids, (n_grid, 64, 64, 3))
 
-        print(np.array(label))
-
-        #random_index = np.random.randint(0, len(self.permutation_arr)-1)
-        selected_permutation = self.permutation_arr[label.eval()]
+        random_index = np.random.randint(0, len(self.permutation_arr)-1)
+        selected_permutation = self.permutation_arr[random_index]
 
         shuffled_tiles = tf.gather(tiles, selected_permutation)
 
