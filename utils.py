@@ -146,3 +146,18 @@ def get_session(args):
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
                 print(e)
+
+
+def read_image(image_path, label):
+    raw = tf.io.read_file(image_path)
+
+    return tf.data.Dataset.from_tensors((raw, label))
+
+
+def preprocess_image(raw, label, tranform_obj):
+    image = tf.io.deocde_jpeg(raw)
+
+    # transformations
+    titles, perm_label, _ = tranform_obj.transform(raw)
+
+    return titles, perm_label

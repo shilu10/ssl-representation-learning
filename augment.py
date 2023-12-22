@@ -403,46 +403,52 @@ def rotate_transform(image):
     return image, image_transformed
 
 
-def jigsaw_transformation(args, image, permutation_arr):
-    h, w = image.shape[: 2]
+class JigSaw(object):
 
-    if int(h) < 256 or int(w) < 256:
-        image = tf.image.resize(images=image, 
-                               size=(256, 256), 
-                               method=tf.image.ResizeMethod.BILINEAR)
+    def __init__(self, args, permutation_arr):
+        self.args = args 
+        self.permutation_arr = permutation_arr
 
-    #x = random.randint(0, width - 225)
-    #y = random.randint(0, height - 225)
-    #cropped_image = image[y:y + 225, x:x + 225]
+    def transform(self, image):
+        h, w = image.shape[: 2]
 
-    cropped_image = tf.image.random_crop(image, size=(225, 225, 3))
+        if int(h) < 256 or int(w) < 256:
+            image = tf.image.resize(images=image, 
+                                   size=(256, 256), 
+                                   method=tf.image.ResizeMethod.BILINEAR)
 
-    # grid size or grid dim
-    grid_size = args.grid_size
-    if isinstance(grid_size, int):
-        grid_size = (grid_size, grid_size)
+        #x = random.randint(0, width - 225)
+        #y = random.randint(0, height - 225)
+        #cropped_image = image[y:y + 225, x:x + 225]
 
-    height, width, channels = cropped_image.shape
+        cropped_image = tf.image.random_crop(image, size=(225, 225, 3))
 
-    coordinates = []
-    for i in range(grid_size[0]):
-        for j in range(grid_size[1]):
-            coordinates.append((i * height // grid_size[0], j * width // grid_size[1]))
+        # grid size or grid dim
+        grid_size = self.args.grid_size
+        if isinstance(grid_size, int):
+            grid_size = (grid_size, grid_size)
 
-    grids = []
-    for coordinate in coordinates:
-        grid = cropped_image[coordinate[0]:coordinate[0] + height // grid_size[0], coordinate[1]:coordinate[1] + width // grid_size[1], :]
-        grids.append(grid)
+        height, width, channels = cropped_image.shape
 
-    grids = tf.convert_to_tensor(grids)
+        coordinates = []
+        for i in range(grid_size[0]):
+            for j in range(grid_size[1]):
+                coordinates.append((i * height // grid_size[0], j * width // grid_size[1]))
 
-    # extract 65*65 tile from the grid
-    n_grid = grid_size[0] * grid_size[1]
-    tiles = tf.image.random_crop(grids, (n_grid, 64, 64, 3))
+        grids = []
+        for coordinate in coordinates:
+            grid = cropped_image[coordinate[0]:coordinate[0] + height // grid_size[0], coordinate[1]:coordinate[1] + width // grid_size[1], :]
+            grids.append(grid)
 
-    random_index = random.randint(len(permutation_arr))
-    selected_permutation = permutation_arr[random_index]
+        grids = tf.convert_to_tensor(grids)
 
-    shuffled_tiles = tf.gather(tiles, selected_permutation)
+        # extract 65*65 tile from the grid
+        n_grid = grid_size[0] * grid_size[1]
+        tiles = tf.image.random_crop(grids, (n_grid, 64, 64, 3))
 
-    return shuffled_tiles, random_index, tiles
+        random_index = random.randint(len(self.permutation_arr))
+        selected_permutation = self.permutation_arr[random_index]
+
+        shuffled_tiles = tf.gather(tiles, selected_permutation)
+
+        return shuffled_tiles, random_index, tiles
