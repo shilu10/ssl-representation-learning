@@ -15,10 +15,6 @@ import keras_cv
 mean_std = [[0.485, 0.456, 0.406],
             [0.229, 0.224, 0.225]]
 
-tf.random.set_seed(None)
-np.random.seed(None)
-random.seed(None)
-
 
 class GaussianBlur(tf.keras.layers.Layer):
     # Implements Gaussian blur as described in the SimCLR paper
@@ -383,7 +379,6 @@ def jigsaw(img):
     imgclips = tf.convert_to_tensor(imgclips)
     imgclips = tf.random.shuffle(imgclips)
 
-    
     return img, imgclips
 
 
@@ -414,7 +409,46 @@ class JigSaw(object):
         self.permutation_arr = permutation_arr
         self.permutation_indices = [_ for _ in range(len(permutation_arr))]
 
-    def transform(self, image, label):
+    def transform(self, img, label):
+        print(label, img)
+       # sess = tf.compat.v1.Session()
+        #result = sess.run(label)
+
+        #label = tf.convert_to_tensor(label)
+        #print(label)
+
+
+        mean, std = mean_std
+        img = tf.cast(img, tf.float32)
+        img /= 255.
+        img -= mean
+        img /= std
+
+        img = tf.clip_by_value(img, 0, 1)
+
+        copy_img = tf.image.resize(img, (225, 225), method='bilinear')
+
+        imgclips = []
+        for i in range(3):
+            for j in range(3):
+                clip = copy_img[i * 75: (i + 1) * 75, j * 75: (j + 1) * 75, :]
+                randomx = tf.experimental.numpy.random.randint(0, 10)
+                randomy = tf.experimental.numpy.random.randint(0, 10)
+                clip = clip[randomx: randomx+64, randomy:randomy+64, :]
+
+                imgclips.append(clip)
+
+        #random_index = random.randint(0, len(self.permutation_arr)-1)
+        r_index = np.random.randint(len(self.permutation_arr)-1)
+        selected_permutation = self.permutation_arr[r_index]
+
+        imgclips = tf.convert_to_tensor(imgclips)
+        
+        shuffled_tiles = tf.gather(imgclips, selected_permutation)
+
+        return shuffled_tiles, r_index, imgclips
+
+    def transform1(self, image, label):
 
         mean, std = mean_std
         image = tf.cast(image, tf.float32)
@@ -425,6 +459,8 @@ class JigSaw(object):
         image = tf.image.resize(image, 
                                 size=(256, 256), 
                                 method=tf.image.ResizeMethod.BILINEAR)
+
+        image = tf.clip_by_value(image, 0, 1)
 
         #x = random.randint(0, width - 225)
         #y = random.randint(0, height - 225)

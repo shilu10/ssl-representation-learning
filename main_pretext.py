@@ -16,9 +16,6 @@ import itertools
 
 AUTO = tf.data.experimental.AUTOTUNE
 
-tf.random.set_seed(None)
-np.random.seed(None)
-random.seed(None)
 
 def parse_args():
 
@@ -73,7 +70,7 @@ def main(args):
 	# dataloader
 	dataset = tf.data.Dataset.from_tensor_slices((image_files))
 	
-	indices = tf.data.Dataset.from_tensor_slices([random.randint(0, 100) for _ in range(len(image_files))])
+	indices = tf.data.Dataset.from_tensor_slices([random.randint(0, 99) for _ in range(len(image_files))])
 	dataset = tf.data.Dataset.zip((dataset, indices))
 	dataset = dataset.repeat()
 	
@@ -81,7 +78,7 @@ def main(args):
 		dataset = dataset.shuffle(len(image_files))
 
 	# for parallel extraction
-	dataset = dataset.interleave(read_image, num_parallel_calls=AUTO)
+	#dataset = dataset.interleave(read_image, num_parallel_calls=AUTO)
 
 	# for parallel preprocessing
 	dataset = dataset.map(lambda x, y: preprocess_image(x, y, jigsaw_transformation))
@@ -97,7 +94,7 @@ def main(args):
 	print(network)
 
 	# optimizer
-	optimizer = tf.keras.optimizers.SGD(lr=args.lr,momentum=0.9,weight_decay = 5e-4)
+	optimizer = tf.keras.optimizers.Adam()
 
 	# criterion
 	criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
@@ -134,8 +131,6 @@ def main(args):
 
 	print(f"Steps per epoch: {iter_per_epoch}")
 
-	random.seed()
-
 	for epoch in range(args.num_epochs):
 		print("\nepoch {}/{}".format(epoch+1, args.num_epochs))
 
@@ -156,9 +151,6 @@ def main(args):
 					top5_acc = top5_acc,
 					loss_tracker = loss_tracker,
 				)
-
-			if step == 15:
-				break
 
 			# batch-level summary writer
 			batch_loss = loss_tracker.result()
@@ -206,7 +198,11 @@ def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker
 		logits = network(inputs, training=True)
 
 		print(labels, "labels")
-		print(logits, "logits")
+
+		logits += 1e-10
+		
+
+		#loss = -tf.reduce_sum(labels*tf.math.log(tf.nn.softmax(logits) + 1e-10))
 
 		# compute custom loss
 		loss = criterion(labels, logits)
@@ -215,12 +211,11 @@ def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker
 
 	# Compute gradients
 	trainable_vars = network.trainable_weights
-	single_list = list(itertools.chain.from_iterable(trainable_vars))
-
-	print('nan' in single_list)
 
 	#print(type(trainable_vars), len(trainable_vars))
 	gradients = tape.gradient(loss, trainable_vars)
+
+	#capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gradients]
 
 	# Update weights
 	optimizer.apply_gradients(zip(gradients, trainable_vars))
