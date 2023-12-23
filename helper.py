@@ -94,12 +94,6 @@ def get_args():
     return parser.parse_args()
 
 
-def set_seed(SEED=42):
-    os.environ['PYTHONHASHSEED'] = str(SEED)
-    random.seed(SEED)
-    np.random.seed(SEED)
-    tf.random.set_seed(SEED)
-
 
 def get_logger(name):
     logger = logging.getLogger(name)
