@@ -11,6 +11,7 @@ from typing import Union
 from utils import read_image, preprocess_image
 from backbone import AlexNet
 from datetime import datetime 
+import itertools
 
 
 AUTO = tf.data.experimental.AUTOTUNE
@@ -91,23 +92,9 @@ def main(args):
 	iter_per_epoch = int(len(image_files) / args.batch_size)
 
 	# network 
-	#network = AlexNet(args.num_classes)
+	network = AlexNet(args.num_classes)
 
-	network = model = keras.Sequential([
-		keras.layers.Conv2D(filters=96, kernel_size=(11, 11), strides=(4, 4), activation='relu', input_shape=(64, 64, 3)),
-		keras.layers.MaxPooling2D(pool_size=(3, 3), strides=(2, 2)),
-		keras.layers.Conv2D(filters=256, kernel_size=(5, 5), strides=(1, 1), activation='relu'),
-		keras.layers.MaxPooling2D(pool_size=(3, 3), strides=(2, 2)),
-		keras.layers.Conv2D(filters=384, kernel_size=(3, 3), strides=(1, 1), activation='relu'),
-		keras.layers.Conv2D(filters=384, kernel_size=(3, 3), strides=(1, 1), activation='relu'),
-		keras.layers.MaxPooling2D(pool_size=(3, 3), strides=(2, 2)),
-		keras.layers.Flatten(),
-		keras.layers.Dense(units=4096, activation='relu'),
-		keras.layers.Dropout(rate=0.5),
-		keras.layers.Dense(units=4096, activation='relu'),
-		keras.layers.Dropout(rate=0.5),
-		keras.layers.Dense(units=100)
-	])
+	print(network)
 
 	# optimizer
 	optimizer = tf.keras.optimizers.SGD(lr=args.lr,momentum=0.9,weight_decay = 5e-4)
@@ -170,7 +157,7 @@ def main(args):
 					loss_tracker = loss_tracker,
 				)
 
-			if step == 5:
+			if step == 15:
 				break
 
 			# batch-level summary writer
@@ -228,6 +215,11 @@ def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker
 
 	# Compute gradients
 	trainable_vars = network.trainable_weights
+	single_list = list(itertools.chain.from_iterable(trainable_vars))
+
+	print('nan' in single_list)
+
+	#print(type(trainable_vars), len(trainable_vars))
 	gradients = tape.gradient(loss, trainable_vars)
 
 	# Update weights
