@@ -434,7 +434,7 @@ class ConvLayer(tf.keras.layers.Layer):
     return x 
 
 
-class LinearLayer(tf.keras.models.Model):
+class LinearLayer(tf.keras.layers.Layer):
   def __init__(self, 
               units: int = 1028, 
               use_act: bool = True, 
@@ -557,10 +557,10 @@ class AlexNet(tf.keras.models.Model):
        
         # conv layer and lrn layers
         x = self.conv_layer_1(inputs[i])
-        x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
+        #x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
 
         x = self.conv_layer_2(x)
-        x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
+        #x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
 
         x = self.conv_layer_3(x)
         x = self.conv_layer_4(x)
@@ -579,3 +579,152 @@ class AlexNet(tf.keras.models.Model):
       out = self.out(x)
 
       return out 
+
+
+
+class AlexnetV1(tf.keras.models.Model):
+  def __init__(self, n_classes):
+    super(AlexnetV1, self).__init__()
+
+    self.n_classes = n_classes
+
+    self.conv1 = tf.keras.models.Sequential([])
+
+    self.conv1.append(
+      tf.keras.layers.Conv2D(filters=96,
+                               kernel_size=(11, 11),
+                               strides=4,
+                               padding="valid",
+                               activation=tf.keras.activations.relu,
+                               input_shape=(image_height, image_width, channels))
+    )
+
+    self.conv1.append(
+      tf.keras.layers.MaxPool2D(pool_size=(3, 3),
+                                  strides=2,
+                                  padding="valid"),
+    )
+
+    self.conv1.append(
+      tf.keras.layers.BatchNormalization(),
+    )
+
+    self.conv2 = tf.keras.models.Sequential([])
+
+    self.conv2.append(
+      tf.keras.layers.Conv2D(filters=256,
+                               kernel_size=(5, 5),
+                               strides=1,
+                               padding="same",
+                               activation=tf.keras.activations.relu),
+    )
+
+    self.conv2.append(
+      tf.keras.layers.MaxPool2D(pool_size=(3, 3),
+                                  strides=2,
+                                  padding="same"),
+      
+    )
+
+    self.conv2.append(
+      tf.keras.layers.BatchNormalization(),
+    )
+
+    self.conv3 = tf.keras.models.Sequential([])
+
+    self.conv3.append(
+        tf.keras.layers.Conv2D(filters=384,
+                               kernel_size=(3, 3),
+                               strides=1,
+                               padding="same",
+                               activation=tf.keras.activations.relu),
+    )
+
+    self.conv4 = tf.keras.Sequential([])
+
+    self.conv4.append(
+      tf.keras.layers.Conv2D(filters=384,
+                               kernel_size=(3, 3),
+                               strides=1,
+                               padding="same",
+                               activation=tf.keras.activations.relu),
+    )
+
+    self.conv5 = tf.keras.models.Sequential([])
+
+    self.conv5.append(
+      tf.keras.layers.Conv2D(filters=256,
+                               kernel_size=(3, 3),
+                               strides=1,
+                               padding="same",
+                               activation=tf.keras.activations.relu),
+    )
+
+    self.conv5.append(
+
+      tf.keras.layers.MaxPool2D(pool_size=(3, 3),
+                                  strides=2,
+                                  padding="same"),
+    )
+
+    self.conv5.append(
+      tf.keras.layers.BatchNormalization(),
+    )
+
+    self.flatten = tf.keras.layers.Flatten()
+
+    self.fc1 = tf.keras.Sequential([])
+
+    self.fc1.append(
+        tf.keras.layers.Dense(units=4096,
+                              activation=tf.keras.activations.relu),
+    )
+
+    self.fc1.append(
+        tf.keras.layers.Dropout(rate=0.2),
+    )
+
+    self.fc2 = tf.keras.models.Sequential([])
+
+    self.fc2.append(tf.keras.layers.Dense(units=4096,
+                              activation=tf.keras.activations.relu),)
+    
+    self.fc2.append(tf.keras.layers.Dropout(rate=0.2),)
+
+    self.out = tf.keras.layers.Dense(units=self.n_classes,
+                             )
+
+
+  def call(self, x, training=False):
+    # B-batch, T-tile, H-height, W-width, C-channels
+    B, T, H, W, C = inputs.shape 
+
+    inputs = tf.transpose(inputs, perm=(1, 0, 2, 3, 4))
+
+    x_list = []
+    for i in range(9):
+       
+      # conv layer and lrn layers
+      x = self.conv1(inputs[i])
+      #x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
+
+      x = self.conv2(x)
+      #x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
+
+      x = self.conv3(x)
+      x = self.conv4(x)
+      x = self.conv5(x)
+
+      x = self.flatten(x)
+      x = self.fc1(x)
+
+      x_list.append(x)
+
+    # linear layers
+    x = tf.concat(x_list, axis=1)
+    x = self.fc2(x)
+
+    # output layer
+    out = self.out(x)
+
+    return out 
