@@ -147,12 +147,15 @@ def read_image(image_path, label):
     return tf.data.Dataset.from_tensors((raw, label))
 
 
-def preprocess_image(value, label, tranform_obj=None):
+def preprocess_image(image_path, label, tranform_obj=None):
+    value = tf.io.read_file(image_path)
     shape = tf.image.extract_jpeg_shape(value)
 
     img = tf.image.decode_jpeg(value)
 
+    perm = random.randint(0, 9)
+
     # transformations
     titles, perm_label, _ = tranform_obj.transform(img, label)
 
-    return titles, label
+    return titles, perm_label
