@@ -499,34 +499,7 @@ class AlexNet(tf.keras.models.Model):
                               pool_strides=(2, 2)
                         )
 
-    self.conv_layer_3 = ConvLayer(kernel_size=(3, 3), 
-                              filters=384,
-                              padding='same', 
-                              use_act=True, 
-                              act_type='relu', 
-                              use_pooling=False, 
-                        )
-
-    self.conv_layer_4 = ConvLayer(kernel_size=(3, 3),
-                              groups=2,
-                              filters=384, 
-                              padding='same', 
-                              use_act=True, 
-                              act_type='relu', 
-                              use_pooling=False, 
-                        )
-
-    self.conv_layer_5 = ConvLayer(kernel_size=(3, 3),
-                              groups=2,
-                              filters=256, 
-                              padding='same', 
-                              use_act=True, 
-                              act_type='relu', 
-                              use_pooling=True, 
-                              pooling_type="max", 
-                              pool_size=(3, 3), 
-                              pool_strides=(2, 2), 
-                        )
+ 
 
     self.linear_layer_1 = LinearLayer(units=1024, 
                                 use_act=True, 
@@ -562,9 +535,9 @@ class AlexNet(tf.keras.models.Model):
         x = self.conv_layer_2(x)
         #x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
 
-        x = self.conv_layer_3(x)
-        x = self.conv_layer_4(x)
-        x = self.conv_layer_5(x)
+        #x = self.conv_layer_3(x)
+        #x = self.conv_layer_4(x)
+        #x = self.conv_layer_5(x)
 
         x = self.flatten(x)
         x = self.linear_layer_1(x)
@@ -590,28 +563,28 @@ class AlexnetV1(tf.keras.models.Model):
 
     self.conv1 = tf.keras.models.Sequential([])
 
-    self.conv1.append(
+    self.conv1.add(
       tf.keras.layers.Conv2D(filters=96,
                                kernel_size=(11, 11),
                                strides=4,
                                padding="valid",
                                activation=tf.keras.activations.relu,
-                               input_shape=(image_height, image_width, channels))
+                               input_shape=(64, 64, 3))
     )
 
-    self.conv1.append(
+    self.conv1.add(
       tf.keras.layers.MaxPool2D(pool_size=(3, 3),
                                   strides=2,
                                   padding="valid"),
     )
 
-    self.conv1.append(
+    self.conv1.add(
       tf.keras.layers.BatchNormalization(),
     )
 
     self.conv2 = tf.keras.models.Sequential([])
 
-    self.conv2.append(
+    self.conv2.add(
       tf.keras.layers.Conv2D(filters=256,
                                kernel_size=(5, 5),
                                strides=1,
@@ -619,20 +592,20 @@ class AlexnetV1(tf.keras.models.Model):
                                activation=tf.keras.activations.relu),
     )
 
-    self.conv2.append(
+    self.conv2.add(
       tf.keras.layers.MaxPool2D(pool_size=(3, 3),
                                   strides=2,
                                   padding="same"),
       
     )
 
-    self.conv2.append(
+    self.conv2.add(
       tf.keras.layers.BatchNormalization(),
     )
 
     self.conv3 = tf.keras.models.Sequential([])
 
-    self.conv3.append(
+    self.conv3.add(
         tf.keras.layers.Conv2D(filters=384,
                                kernel_size=(3, 3),
                                strides=1,
@@ -642,7 +615,7 @@ class AlexnetV1(tf.keras.models.Model):
 
     self.conv4 = tf.keras.Sequential([])
 
-    self.conv4.append(
+    self.conv4.add(
       tf.keras.layers.Conv2D(filters=384,
                                kernel_size=(3, 3),
                                strides=1,
@@ -652,7 +625,7 @@ class AlexnetV1(tf.keras.models.Model):
 
     self.conv5 = tf.keras.models.Sequential([])
 
-    self.conv5.append(
+    self.conv5.add(
       tf.keras.layers.Conv2D(filters=256,
                                kernel_size=(3, 3),
                                strides=1,
@@ -660,14 +633,14 @@ class AlexnetV1(tf.keras.models.Model):
                                activation=tf.keras.activations.relu),
     )
 
-    self.conv5.append(
+    self.conv5.add(
 
       tf.keras.layers.MaxPool2D(pool_size=(3, 3),
                                   strides=2,
                                   padding="same"),
     )
 
-    self.conv5.append(
+    self.conv5.add(
       tf.keras.layers.BatchNormalization(),
     )
 
@@ -675,31 +648,33 @@ class AlexnetV1(tf.keras.models.Model):
 
     self.fc1 = tf.keras.Sequential([])
 
-    self.fc1.append(
+    self.fc1.add(
         tf.keras.layers.Dense(units=4096,
                               activation=tf.keras.activations.relu),
     )
 
-    self.fc1.append(
+    self.fc1.add(
         tf.keras.layers.Dropout(rate=0.2),
     )
 
     self.fc2 = tf.keras.models.Sequential([])
 
-    self.fc2.append(tf.keras.layers.Dense(units=4096,
+    self.fc2.add(tf.keras.layers.Dense(units=4096,
                               activation=tf.keras.activations.relu),)
     
-    self.fc2.append(tf.keras.layers.Dropout(rate=0.2),)
+    self.fc2.add(tf.keras.layers.Dropout(rate=0.2),)
 
     self.out = tf.keras.layers.Dense(units=self.n_classes,
                              )
 
 
-  def call(self, x, training=False):
+  def call(self, inputs, training=False):
     # B-batch, T-tile, H-height, W-width, C-channels
     B, T, H, W, C = inputs.shape 
 
     inputs = tf.transpose(inputs, perm=(1, 0, 2, 3, 4))
+
+    print(inputs.shape)
 
     x_list = []
     for i in range(9):
@@ -711,9 +686,9 @@ class AlexnetV1(tf.keras.models.Model):
       x = self.conv2(x)
       #x = tf.nn.local_response_normalization(x, depth_radius=2, alpha=0.0001, beta=0.75, bias=1.0)
 
-      x = self.conv3(x)
-      x = self.conv4(x)
-      x = self.conv5(x)
+      ##x = self.conv3(x)
+      #x = self.conv4(x)
+      #x = self.conv5(x)
 
       x = self.flatten(x)
       x = self.fc1(x)
