@@ -8,8 +8,8 @@ import numpy as np
 import argparse 
 from augment import JigSaw
 from typing import Union
-from utils import read_image, preprocess_image
-from backbone import AlexNet
+from utils import read_image, preprocess_image, PretextTaskDataGenerator, DataLoader
+from backbone import AlexNet, AlexnetV1
 from datetime import datetime 
 import itertools
 
@@ -58,33 +58,40 @@ def main(args):
 	#else: 
 	#	print('CPU mode')
 
-	permutation_arr = np.load(args.permutation_arr_path)
+	#permutation_arr = np.load(args.permutation_arr_path)
 
 	# transformation (jigsaw or rotation)
-	jigsaw_transformation = JigSaw(args, permutation_arr)
+	#jigsaw_transformation = JigSaw(args, permutation_arr)
 
 	# trainloader and val dataloader 
 	image_files = list(paths.list_images(args.unlabeled_datapath))
 	#dummy_labels = [_ for _ in range(len(image_files))]
 
 	# dataloader
-	dataset = tf.data.Dataset.from_tensor_slices((image_files))
+#	dataset = tf.data.Dataset.from_tensor_slices((image_files))
 	
-	indices = tf.data.Dataset.from_tensor_slices([random.randint(0, 99) for _ in range(len(image_files))])
-	dataset = tf.data.Dataset.zip((dataset, indices))
-	dataset = dataset.repeat()
+#	indices = tf.data.Dataset.from_tensor_slices([random.randint(0, 99) for _ in range(len(image_files))])
+#	dataset = tf.data.Dataset.zip((dataset, indices))
+	#dataset = dataset.repeat()
 	
-	if args.shuffle:
-		dataset = dataset.shuffle(len(image_files))
+	#if args.shuffle:
+	#	dataset = dataset.shuffle(len(image_files))
 
 	# for parallel extraction
 	#dataset = dataset.interleave(read_image, num_parallel_calls=AUTO)
 
 	# for parallel preprocessing
-	dataset = dataset.map(lambda x, y: preprocess_image(x, y, jigsaw_transformation))
+#	dataset = dataset.map(lambda x, y:  tf.py_function(preprocess_image, [x, y, jigsaw_transformation], [tf.float32, tf.int32]))
 
-	dataset = dataset.batch(args.batch_size, drop_remainder=True)
-	dataset = dataset.prefetch(AUTO)
+#	dataset = dataset.batch(args.batch_size, drop_remainder=True)
+#	dataset = dataset.prefetch(AUTO)
+
+	dl = DataLoader(args, args.permutation_arr_path, args.num_classes)
+
+	dataset = dl.get_dataset()
+
+	
+	#dataset = PretextTaskDataGenerator(args, image_files, args.batch_size, args.shuffle, args.num_classes, args.permutation_arr_path)
 
 	iter_per_epoch = int(len(image_files) / args.batch_size)
 
@@ -102,8 +109,8 @@ def main(args):
 	# checkpoint 
 	ckpt = tf.train.Checkpoint(step=tf.Variable(1), 
 							  optimizer=optimizer, 
-							  net=network,#)
-							  iterator=iter(dataset))
+							  net=network,)
+							 # iterator=iter(dataset))
 
 	manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=3)
 
@@ -131,16 +138,18 @@ def main(args):
 
 	print(f"Steps per epoch: {iter_per_epoch}")
 
+	#pb_i = Progbar(iter_per_epoch, stateful_metrics=metrics_names)
+
 	for epoch in range(args.num_epochs):
 		print("\nepoch {}/{}".format(epoch+1, args.num_epochs))
 
 		# progress bar
-		pb_i = Progbar(iter_per_epoch, stateful_metrics=metrics_names)
 		
-		iter_dataset = iter(dataset)
-		for step in range(iter_per_epoch):
+		
+		#iter_dataset = iter(dataset)
+		for step, batch in tqdm(enumerate(dataset), total=iter_per_epoch):
 			# for infinite dataset
-			batch = next(iter_dataset)
+			#batch = next(iter_dataset)
 
 			result = train(
 					network = network,
@@ -164,9 +173,14 @@ def main(args):
 			# update progress bar
 			values=[('loss', batch_loss.numpy()), ('batch_top1_acc', batch_top1_acc.numpy()), ('batch_top5_acc', batch_top5_acc.numpy())]
 			
-			pb_i.add(args.batch_size, values=values)
+			#pb_i.add(args.batch_size, values=values)
+
+			# progbar.update(step)
 
 			# validation code goes here
+
+			if step % 20 == 0:
+				print(f'loss: {batch_loss} top1: {batch_top1_acc}, top5: {batch_top5_acc}')
 
 		epoch_loss = loss_tracker.result()
 		epoch_top1_acc = top1_acc.result()
@@ -183,6 +197,8 @@ def main(args):
 		top5_acc.reset_state()
 		top1_acc.reset_state()
 
+		print(f'loss: {epoch_loss} top1: {epoch_top1_acc}, top5: {epoch_top5_acc}')
+
 		# for checkpoint update
 		ckpt.step.assign_add(1)
 		if int(ckpt.step) % 5 == 0:
@@ -193,21 +209,21 @@ def main(args):
 
 def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker):
 	inputs, labels = batch 
+
+	print(inputs.shape)
 	
 	with tf.GradientTape() as tape:
 		logits = network(inputs, training=True)
 
-		print(labels, "labels")
+		print(logits.shape)
 
-		logits += 1e-10
+		#logits += 1e-10
 		
 
 		#loss = -tf.reduce_sum(labels*tf.math.log(tf.nn.softmax(logits) + 1e-10))
 
 		# compute custom loss
 		loss = criterion(labels, logits)
-
-		print(loss)
 
 	# Compute gradients
 	trainable_vars = network.trainable_weights

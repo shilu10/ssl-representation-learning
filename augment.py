@@ -409,14 +409,14 @@ class JigSaw(object):
         self.permutation_arr = permutation_arr
         self.permutation_indices = [_ for _ in range(len(permutation_arr))]
 
+        
+    @tf.function
     def transform(self, img, label):
-        print(label, img)
-       # sess = tf.compat.v1.Session()
-        #result = sess.run(label)
 
-        #label = tf.convert_to_tensor(label)
-        #print(label)
+      #  label = tf.numpy_function(lambda label: int(label.numpy()), [label], tf.int32)
 
+       # print(tf.compat.v1.contrib.util.make_ndarray(label))
+       # print(label.numpy(), "label")
 
         mean, std = mean_std
         img = tf.cast(img, tf.float32)
@@ -439,12 +439,23 @@ class JigSaw(object):
                 imgclips.append(clip)
 
         #random_index = random.randint(0, len(self.permutation_arr)-1)
-        r_index = np.random.randint(len(self.permutation_arr)-1)
-        selected_permutation = self.permutation_arr[r_index]
+        np.random.shuffle(self.permutation_indices)
+
+        #print(shuffle_permu_ind)
+
+        #print(self.permutation_indices)
+
+       # r_index = self.permutation_indices[0]
+
+        r_index = tf.random.uniform([], minval=0, maxval=99, dtype=tf.dtypes.int32)
+        print(r_index, 'r_index')
+        #dummy = tf.zeros(100)
+        #print(dummy[tf.cast(label, tf.int32)])
+        selected_permutation = self.permutation_arr[r_index.numpy()]
 
         imgclips = tf.convert_to_tensor(imgclips)
         
-        shuffled_tiles = tf.gather(imgclips, selected_permutation)
+        shuffled_tiles = tf.gather(imgclips, selected_permutation, axis=0)
 
         return shuffled_tiles, r_index, imgclips
 
