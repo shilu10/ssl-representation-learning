@@ -297,11 +297,16 @@ class DataLoader:
 
         image = tf.image.decode_jpeg(value)
 
-        tiles, perm_label, _ = self.transform(image, label)
+        result = self.transform(image, label)
+
+        if len(result) == 1:
+            print("not 64")
+
+        tiles, perm_label = result
 
         return tiles, perm_label 
 
-    def transform(self, img, label):
+    def transform1(self, img, label):
 
       #  label = tf.numpy_function(lambda label: int(label.numpy()), [label], tf.int32)
 
@@ -324,6 +329,7 @@ class DataLoader:
                 clip = clip[randomx: randomx+64, randomy:randomy+64, :]
 
                 if clip.shape[0] != 64 or clip.shape[1] != 64:
+                    print("not same shape")
                     return "not a same shape"
 
                 imgclips.append(clip)
@@ -344,9 +350,9 @@ class DataLoader:
         
         shuffled_tiles = tf.gather(imgclips, selected_permutation, axis=0)
 
-        return shuffled_tiles, r_index, imgclips
+        return shuffled_tiles, r_index
 
-    def transform1(self, image, label):
+    def transform(self, image, label):
         image = tf.cast(image, tf.float32)
         image /= 255.
         #image -= mean
@@ -375,20 +381,27 @@ class DataLoader:
         grids = []
         for coordinate in coordinates:
             grid = cropped_image[coordinate[0]:coordinate[0] + height // grid_size[0], coordinate[1]:coordinate[1] + width // grid_size[1], :]
+           
+            randomx = tf.experimental.numpy.random.randint(0, 10)
+            randomy = tf.experimental.numpy.random.randint(0, 10)
+            #clip = grid[randomx: randomx+64, randomy:randomy+64, :]
             grids.append(grid)
 
+            
         grids = tf.convert_to_tensor(grids)
 
         # extract 65*65 tile from the grid
         n_grid = grid_size[0] * grid_size[1]
-        tiles = tf.image.random_crop(grids, (n_grid, 64, 64, 3))
 
-        r_index = tf.random.uniform([], minval=0, maxval=99, dtype=tf.dtypes.int32)
+        #print(grids.shape)
+        tiles = tf.image.random_crop(grids, (-1, 64, 64, 3))
+
+        r_index = tf.random.uniform([], minval=0, maxval=self.num_classes, dtype=tf.dtypes.int32)
         selected_permutation = self.permutations[r_index.numpy()]
 
         shuffled_tiles = tf.gather(tiles, selected_permutation, axis=0)
 
-        return shuffled_tiles, r_index, tiles
+        return shuffled_tiles, r_index
 
 
     def __retrive_permutations(self, num_classes, permutation_path):
@@ -480,7 +493,7 @@ class PretextTaskDataGenerator(tf.keras.utils.Sequence):
 
         images = []
         labels = []
-        for image_path in self.image_paths[start:end]:
+        for image_path in self.image_paths[start: end]:
             image = tf.io.read_file(image_path)
             image = tf.image.decode_image(image)
 
@@ -494,6 +507,104 @@ class PretextTaskDataGenerator(tf.keras.utils.Sequence):
             labels.append(random_index)
         
         return tf.convert_to_tensor(images), tf.convert_to_tensor(labels)
+
+    def on_epoch_end(self):
+        #self.indexes = np.arange(self.image_paths)
+
+        if self.shuffle:
+            np.random.shuffle(self.image_paths)
+    
+    def __retrive_permutations(self, num_classes, permutation_path):
+        all_perm = np.load(permutation_path)
+
+        # from range [1,9] to [0,8]
+        if all_perm.min() == 1:
+            all_perm = all_perm - 1
+
+        return all_perm
+
+    def transform(self, image, permutation):
+        image = tf.cast(image, tf.float32)
+        image /= 255.
+        #image -= mean
+        #image /= std
+
+        image = tf.image.resize(image, 
+                                size=(256, 256), 
+                                method=tf.image.ResizeMethod.BILINEAR)
+
+        image = tf.clip_by_value(image, 0, 1)
+
+        #x = random.randint(0, width - 225)
+        #y = random.randint(0, height - 225)
+        #cropped_image = image[y:y + 225, x:x + 225]
+
+        cropped_image = tf.image.random_crop(image, size=(225, 225, 3))
+
+        # grid size or grid dim
+        grid_size = self.args.grid_size
+        if isinstance(grid_size, int):
+            grid_size = (grid_size, grid_size)
+
+        height, width, channels = cropped_image.shape
+
+        coordinates = []
+        for i in range(grid_size[0]):
+            for j in range(grid_size[1]):
+                coordinates.append((i * height // grid_size[0], j * width // grid_size[1]))
+
+        grids = []
+        for coordinate in coordinates:
+            grid = cropped_image[coordinate[0]:coordinate[0] + height // grid_size[0], coordinate[1]:coordinate[1] + width // grid_size[1], :]
+            grids.append(grid)
+
+        grids = tf.convert_to_tensor(grids)
+
+        # extract 65*65 tile from the grid
+        n_grid = grid_size[0] * grid_size[1]
+        tiles = tf.image.random_crop(grids, (n_grid, 64, 64, 3))
+
+       # random_index = np.random.randint(0, len(self.permutation_arr)-1)
+       # selected_permutation = self.permutation_arr[random_index]
+
+        shuffled_tiles = tf.gather(tiles, permutation)
+
+        return shuffled_tiles, permutation, tiles
+
+
+class PretextTaskDataGenerator1(tf.keras.utils.Sequence):
+
+    def __init__(self, args, image_paths, batch_size, shuffle, num_classes, permutation_path):
+        self.image_paths = image_paths
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.num_classes = num_classes
+        self.permutations = self.__retrive_permutations(num_classes, permutation_path)
+        self.args = args
+
+    def __len__(self):
+        return len(self.image_paths) // self.batch_size
+
+    def __getitem__(self, index):
+        start = index * self.batch_size
+        end = start + self.batch_size
+
+        batch_images = []
+        batch_labels = []
+        for image_path in self.image_paths[start: end]:
+            image = tf.io.read_file(image_path)
+            image = tf.image.decode_image(image)
+
+
+            random_index = random.randint(0, self.num_classes-1)
+            sel_permutation = self.permutations[random_index]
+
+            transformed_image, _, _ = self.transform(image, sel_permutation)
+
+            batch_images.append(transformed_image)
+            batch_labels.append(random_index)
+        
+        return np.stack(batch_images, axis=0), np.array(batch_labels)
 
     def on_epoch_end(self):
         #self.indexes = np.arange(self.image_paths)
