@@ -703,3 +703,176 @@ class AlexnetV1(tf.keras.models.Model):
     out = self.out(x)
 
     return out 
+
+
+class LRNLayer(tf.keras.layers.Layer):
+    def __init__(self, local_size=1, alpha=1.0, beta=0.75, **kwargs):
+        self.local_size = local_size
+        self.alpha = alpha
+        self.beta = beta
+        super(LRNLayer, self).__init__(**kwargs)
+
+    def call(self, x):
+        return tf.nn.lrn(x, depth_radius=self.local_size, bias=self.beta, alpha=self.alpha)
+
+class Network(tf.keras.Model):
+    def __init__(self, classes=1000):
+        super(Network, self).__init__()
+
+        self.conv = tf.keras.Sequential([
+            layers.Conv2D(96, kernel_size=11, strides=2, padding='valid'),
+            layers.ReLU(),
+            layers.MaxPooling2D(pool_size=3, strides=2),
+            LRNLayer(local_size=5, alpha=0.0001, beta=0.75),
+            layers.Conv2D(256, kernel_size=5, padding='same', groups=2),
+            layers.ReLU(),
+            layers.MaxPooling2D(pool_size=3, strides=2),
+            LRNLayer(local_size=5, alpha=0.0001, beta=0.75),
+            layers.Conv2D(384, kernel_size=3, padding='same'),
+            layers.ReLU(),
+            layers.Conv2D(384, kernel_size=3, padding='same', groups=2),
+            layers.ReLU(),
+            layers.Conv2D(256, kernel_size=3, padding='same', groups=2),
+            layers.ReLU(),
+            layers.MaxPooling2D(pool_size=3, strides=2)
+        ])
+
+        self.fc6 = tf.keras.Sequential([
+            layers.Flatten(),
+            layers.Dense(1024),
+            layers.ReLU(),
+            layers.Dropout(0.5),
+        ])
+
+        self.fc7 = tf.keras.Sequential([
+            layers.Dense(4096),
+            layers.ReLU(),
+            layers.Dropout(0.5),
+        ])
+
+        self.flatten = tf.keras.layers.Flatten()
+
+        self.classifier = tf.keras.Sequential([
+            layers.Dense(classes),
+        ])
+
+    def call(self, x, training=False):
+      B,T,C,H,W = x.shape
+
+      x = tf.transpose(x, (1, 0, 2, 3, 4))
+
+      x_list = []
+      for i in range(9):
+        z = self.conv(x[i])
+        z = self.flatten(z)
+        z = self.fc6(z)
+
+        x_list.append(z)
+
+      x = tf.concat(x_list, axis=1)
+      x = self.fc7(x)
+      x = self.classifier(x)
+      return x
+
+
+class BasicBlock(tf.keras.Model):
+    def __init__(self, in_planes, out_planes, kernel_size):
+        super(BasicBlock, self).__init__()
+        padding = (kernel_size - 1) // 2
+        self.layer = tf.keras.Sequential([
+            layers.Conv2D(out_planes, kernel_size=kernel_size, strides=1, padding='same', use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU()
+        ])
+
+    def call(self, x):
+        return self.layer(x)
+
+class GlobalAveragePooling(tf.keras.Model):
+    def __init__(self):
+        super(GlobalAveragePooling, self).__init__()
+
+    def call(self, feat):
+        return tf.reduce_mean(feat, axis=[1, 2])
+
+class NetworkInNetwork(tf.keras.Model):
+    def __init__(self, num_classes, num_stages, use_avg_on_conv3):
+        super(NetworkInNetwork, self).__init__()
+
+      #  num_classes = opt['num_classes']
+       # num_inchannels = opt['num_inchannels'] if ('num_inchannels' in opt) else 3
+       # num_stages = opt['num_stages'] if ('num_stages' in opt) else 3
+       # use_avg_on_conv3 = opt['use_avg_on_conv3'] if ('use_avg_on_conv3' in opt) else True
+
+        assert num_stages >= 3
+        nChannels = 192
+        nChannels2 = 160
+        nChannels3 = 96
+
+        self.blocks = []
+        # 1st block
+        self.blocks.append(tf.keras.Sequential([
+            BasicBlock(3, nChannels, 5),
+            BasicBlock(nChannels, nChannels2, 1),
+            BasicBlock(nChannels2, nChannels3, 1),
+            layers.MaxPooling2D(pool_size=3, strides=2, padding='same')
+        ]))
+
+        # 2nd block
+        self.blocks.append(tf.keras.Sequential([
+            BasicBlock(nChannels3, nChannels, 5),
+            BasicBlock(nChannels, nChannels, 1),
+            BasicBlock(nChannels, nChannels, 1),
+            layers.AvgPool2D(pool_size=3, strides=2, padding='same')
+        ]))
+
+        # 3rd block
+        self.blocks.append(tf.keras.Sequential([
+            BasicBlock(nChannels, nChannels, 3),
+            BasicBlock(nChannels, nChannels, 1),
+            BasicBlock(nChannels, nChannels, 1),
+            layers.AvgPool2D(pool_size=3, strides=2, padding='same') if num_stages > 3 and use_avg_on_conv3 else tf.identity # This is only added conditionally in PyTorch code
+        ]))
+
+        for s in range(3, num_stages):
+            self.blocks.append(tf.keras.Sequential([
+                BasicBlock(nChannels, nChannels, 3),
+                BasicBlock(nChannels, nChannels, 1),
+                BasicBlock(nChannels, nChannels, 1)
+            ]))
+
+        # Global average pooling and classifier
+        self.blocks.append(tf.keras.Sequential([
+            GlobalAveragePooling(),
+            layers.Dense(num_classes)
+        ]))
+
+        self.all_feat_names = ['conv'+str(s+1) for s in range(num_stages)] + ['classifier',]
+
+    def call(self, x, out_feat_keys=None):
+        out_feats = []
+
+        for f, block in enumerate(self.blocks):
+            x = block(x)
+            key = f'conv{f+1}' if f < len(self.blocks) - 1 else 'classifier'
+            if out_feat_keys is None or key in out_feat_keys:
+                out_feats.append(x)
+
+        return out_feats[0] if len(out_feats) == 1 else out_feats
+
+def create_model(num_classes=4, num_stages=5):
+    return NetworkInNetwork(num_classes=num_classes, num_stages=num_stages, use_avg_on_conv3=True)
+
+'''
+if __name__ == '__main__':
+    size = 32
+    model = create_model()
+
+    x = tf.random.uniform((1, size, size, 3), -1, 1)
+    print(x.shape)
+    out = model(x, None) #out_feat_keys=[f'conv{i+1}' for i in range(5)]
+    for f, feat in enumerate(out):
+        print(f'Output feature conv{f+1} - size {feat.shape}')
+
+    out = model(x)
+    print(f'Final output: {out}')
