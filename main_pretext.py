@@ -124,6 +124,7 @@ def main(args):
 	iter_per_epoch = int(len(image_files_path) / args.batch_size)
 
 	# network 
+	if args.pretext_task_type == 'jigsaw':
 	network = AlexNet(args.num_classes)
 
 	# optimizer
