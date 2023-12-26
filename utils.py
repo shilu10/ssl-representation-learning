@@ -151,26 +151,29 @@ def gen_random():
     return r 
 
 
-class RotateNetDataLoader:
+class RotateNetDataLoader(object):
     def __init__(self, 
                 image_files_path, 
                 rotations=[0, 90, 180, 270], 
-                show_all_rotations=False, 
+                use_all_rotations=False, 
                 split_type='train',
                 shuffle=True):
 
         self.image_files_path = image_files_path
         self.rotations = rotations
-        self.show_all_rotations = show_all_rotations
+        self.use_all_rotations = use_all_rotations
         self.split_type = split_type
         self.shuffle = shuffle
 
-    def parse_file(self, image_path):
+    def parse_file(self, image_path, label=None):
         raw = tf.io.read_file(image_path)
+
+        if label is not None:
+          return tf.data.Dataset.from_tensors((raw, label))
 
         return tf.data.Dataset.from_tensors(raw)
 
-    def preprocess_image(value, rotation_index):
+    def preprocess_image(self, value, rotation_index):
         shape = tf.image.extract_jpeg_shape(value)
 
         image = tf.image.decode_jpeg(value)
@@ -219,7 +222,7 @@ class RotateNetDataLoader:
 
     def get_dataset(self):
 
-        if self.show_all_rotations:
+        if self.use_all_rotations:
             dataset = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor([], dtype=tf.string))
             indices = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor([], dtype=tf.int32))
 
@@ -235,14 +238,14 @@ class RotateNetDataLoader:
         
         else:
             dataset = tf.data.Dataset.from_tensor_slices(self.image_files_path)
-            indices = tf.data.Dataset.from_tensor_slices([random.randint(0, 3) for _ in range(len(image_files))])
+            indices = tf.data.Dataset.from_tensor_slices([random.randint(0, 3) for _ in range(len(self.image_files_path))])
             dataset = tf.data.Dataset.zip((dataset, indices))
 
         if self.shuffle:
             dataset = dataset.shuffle(len(self.image_files_path))
 
         dataset = dataset.interleave(self.parse_file, num_parallel_calls=AUTO)
-        dataset = dataset.map(lambda x, y:  tf.py_function(self.preprocess_image, [x, y], [tf.float32, tf.int32]), num_parallel_calls=AUTO)
+        dataset = dataset.map(lambda x, y:  tf.py_function(self.preprocess_image, [x, y], [tf.float32, tf.int32]))
 
         dataset = dataset.prefetch(AUTO)
 

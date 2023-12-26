@@ -8,10 +8,11 @@ import numpy as np
 import argparse 
 from augment import JigSaw
 from typing import Union
-from utils import read_image, preprocess_image, PretextTaskDataGenerator, DataLoader, PretextTaskDataGenerator1
-from backbone import AlexNet, AlexnetV1, Network
+from utils import RotateNetDataLoader, PretextTaskDataGenerator
+from backbone import AlexNet, AlexnetV1
 from datetime import datetime 
 import itertools
+import matplotlib.pyplot as plt 
 
 
 AUTO = tf.data.experimental.AUTOTUNE
@@ -45,20 +46,22 @@ def parse_args():
 
 	parser.add_argument('--pretext_task_type', type=str, default='jigsaw', choices=['jigsaw', 'rotation'])
 
+	parser.add_argument('--use_all_rotations', type=bool, default=False)
+
 	return parser.parse_args()
 
 
 def main(args):
 	
 	# assertion errors
-	#if args.pretext_task_type == 'jigsaw':
-	#	permutation_arr_path = args.permutation_arr_path
+	if args.pretext_task_type == 'jigsaw':
+		permutation_arr_path = args.permutation_arr_path
+		assert os.path.exists(args.permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
 	#	permutation_arr_path_n_classes = permutation_arr_path.split('.')[0].split('_')[-1]
 	#	assert permutation_arr_path_n_classes == args.num_classes, "permutation_arr_path mismatch with num_classes"
-
+	
 	assert os.path.exists(args.unlabeled_datapath), f"no file or folder exists at {args.unlabeled_datapath}"
-	assert os.path.exists(args.permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
-
+	
 	# setting specific gpu in multi-gpu workstation for cuda job.
 	#if args.gpu is not None:
 	#	os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -69,19 +72,39 @@ def main(args):
 
 
 	# trainloader and val dataloader 
-	image_files = list(paths.list_images(args.unlabeled_datapath))
-	train_image_files = image_files
-
+	image_files_path = list(paths.list_images(args.unlabeled_datapath))
+	
 	if args.use_validation:
-		num_val_images = int(len(image_files) * args.val_split_size)
+		num_val_images = int(len(image_files_path) * args.val_split_size)
+		validation_image_files_path = image_files_path[: num_val_images]
+		train_image_files_path = image_files_path[num_val_images+1: ]
 
-		validation_image_files = image_files[: num_val_images]
-		train_image_files = image_files[num_val_images+1: ]
+	else:
+		train_image_files_path = image_files_path
+
+	if args.pretext_task_type == 'jigsaw':
 		
-	train_dataset = PretextTaskDataGenerator(args, train_image_files, args.batch_size, args.shuffle, args.num_classes, args.permutation_arr_path)
+		train_dataset = PretextTaskDataGenerator(args, train_image_files_path, args.batch_size, args.shuffle, args.num_classes, args.permutation_arr_path)
 
-	if args.use_validation:
-		val_dataset = PretextTaskDataGenerator(args, validation_image_files, args.batch_size, args.shuffle, args.num_classes, args.permutation_arr_path)
+		if args.use_validation:
+			val_dataset = PretextTaskDataGenerator(args, validation_image_files_path, args.batch_size, args.shuffle, args.num_classes, args.permutation_arr_path)
+
+	elif args.pretext_task_type == 'rotation':
+
+		train_dataset = RotateNetDataLoader(image_files_path=train_image_files_path, 
+											rotations=[0, 90, 180, 270], 
+											use_all_rotations=args.use_all_rotations, 
+											split_type='train', 
+											shuffle=args.shuffle
+										).get_dataset()
+
+		if args.use_validation:
+			val_dataset = RotateNetDataLoader(image_files_path=validation_image_files_path, 
+											rotations=[0, 90, 180, 270], 
+											use_all_rotations=args.use_all_rotations, 
+											split_type='val', 
+											shuffle=args.shuffle
+										).get_dataset()
 
 	'''
 	# Apply optimizations
@@ -98,10 +121,10 @@ def main(args):
 	dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 	'''
 
-	iter_per_epoch = int(len(image_files) / args.batch_size)
+	iter_per_epoch = int(len(image_files_path) / args.batch_size)
 
 	# network 
-	network = Network(args.num_classes)
+	network = AlexNet(args.num_classes)
 
 	# optimizer
 	optimizer = tf.keras.optimizers.Adam()
@@ -165,6 +188,10 @@ def main(args):
 
 		# train step
 		for step, batch in enumerate(train_dataset):
+
+			# initial updation of val progbar
+			val_values = [('val_loss', 0.0), ('val_top1_acc', 0.0), ('val_top5_acc', 0.0)]
+			progbar.add(0, values=val_values)
 
 			result = train(
 					network = network,
