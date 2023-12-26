@@ -779,7 +779,7 @@ class BasicBlock(tf.keras.Model):
     def __init__(self, in_planes, out_planes, kernel_size):
         super(BasicBlock, self).__init__()
         padding = (kernel_size - 1) // 2
-        self.layer = tf.keras.Sequential([
+        self._layer = tf.keras.Sequential([
             layers.Conv2D(out_planes, kernel_size=kernel_size, strides=1, padding='same', use_bias=False),
             layers.BatchNormalization(),
             layers.ReLU()
