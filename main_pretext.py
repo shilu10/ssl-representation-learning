@@ -9,7 +9,7 @@ import argparse
 from augment import JigSaw
 from typing import Union
 from utils import RotateNetDataLoader, PretextTaskDataGenerator
-from backbone import AlexNet, AlexnetV1
+from backbone import AlexNet as alex, AlexnetV1
 from datetime import datetime 
 import itertools
 import matplotlib.pyplot as plt 

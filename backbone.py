@@ -863,16 +863,3 @@ class NetworkInNetwork(tf.keras.Model):
 def create_model(num_classes=4, num_stages=5):
     return NetworkInNetwork(num_classes=num_classes, num_stages=num_stages, use_avg_on_conv3=True)
 
-'''
-if __name__ == '__main__':
-    size = 32
-    model = create_model()
-
-    x = tf.random.uniform((1, size, size, 3), -1, 1)
-    print(x.shape)
-    out = model(x, None) #out_feat_keys=[f'conv{i+1}' for i in range(5)]
-    for f, feat in enumerate(out):
-        print(f'Output feature conv{f+1} - size {feat.shape}')
-
-    out = model(x)
-    print(f'Final output: {out}')
