@@ -4,19 +4,6 @@ import numpy as np
 import os, sys, shutil 
 
 
-class LRNLayer(tf.keras.layers.Layer):
-    def __init__(self, local_size=1, alpha=1.0, beta=0.75, **kwargs):
-        self.local_size = local_size
-        self.alpha = alpha
-        self.beta = beta
-        super(LRNLayer, self).__init__(**kwargs)
-
-    def call(self, x):
-        return tf.nn.lrn(x, depth_radius=self.local_size, bias=self.beta, alpha=self.alpha)
-
-    def from_config(self)
-
-
 class ConvLayer(tf.keras.layers.Layer):
   def __init__(self, 
               kernel_size: tuple = (3, 3), 
@@ -175,9 +162,6 @@ class AlexNet(tf.keras.models.Model):
                               use_dropout=True, 
                               dropout_rate=0.5
                         )
-
-    self.lrn_1 = LRNLayer(local_size=5, alpha=0.0001, beta=0.75)
-    self.lrn_2 = LRNLayer(local_size=5, alpha=0.0001, beta=0.75)
 
     self.flatten = tf.keras.layers.Flatten()
 
