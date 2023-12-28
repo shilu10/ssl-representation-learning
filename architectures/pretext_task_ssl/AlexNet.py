@@ -2,6 +2,21 @@ import tensorflow as tf
 from tensorflow import keras 
 import numpy as np 
 import os, sys, shutil 
+from typing import Union
+
+
+class LRNLayer(tf.keras.layers.Layer):
+    def __init__(self, local_size=1, alpha=1.0, beta=0.75, **kwargs):
+        self.local_size = local_size
+        self.alpha = alpha
+        self.beta = beta
+        super(LRNLayer, self).__init__(**kwargs)
+
+    def call(self, x):
+        return tf.nn.lrn(x, depth_radius=self.local_size, bias=self.beta, alpha=self.alpha)
+
+    def from_config(self):
+      pass 
 
 
 class ConvLayer(tf.keras.layers.Layer):
@@ -163,38 +178,37 @@ class AlexNet(tf.keras.models.Model):
                               dropout_rate=0.5
                         )
 
+    self.lrn_1 = LRNLayer(local_size=5, alpha=0.0001, beta=0.75)
+    self.lrn_2 = LRNLayer(local_size=5, alpha=0.0001, beta=0.75)
+
     self.flatten = tf.keras.layers.Flatten()
 
     self.out = tf.keras.layers.Dense(n_classes)
 
+  def forward_once(self, inputs):
+    x = self.conv_1(inputs)
+    x = self.conv_2(x)
+    x = self.conv_3(x)
+    x = self.conv_4(x)
+    x = self.conv_5(x)
+
+    x = self.flatten(x)
+    x = self.fc_1(x)
+
+    return x
+
   def call(self, inputs, training=False):
       # B-batch, T-tile, H-height, W-width, C-channels
-      B, T, H, W, C = inputs.shape 
-      inputs = tf.transpose(inputs, perm=(1, 0, 2, 3, 4))
+      B, T, H, W, C = inputs.shape
+      uniform_inputs, random_inputs = tf.unstack(inputs, axis=1) 
 
-      x_list = []
-      for i in range(9):
-        # conv layer and lrn layers
-        x = self.conv_1(inputs[i])
-        x = self.lrn_1(x)
+      fc6_uniform_feats = self.forward_once(uniform_inputs)
+      fc6_random_feats = self.forward_once(random_inputs)
 
-        x = self.conv_1(x)
-        x = self.lrn_2(x)
+      combined_feats = tf.concat([fc6_uniform_feats, fc6_random_feats], -1)
+      x = self.fc_2(combined_feats)
 
-        x = self.conv_1(x)
-        x = self.conv_1(x)
-        x = self.conv_1(x)
-
-        x = self.flatten(x)
-        x = self.fc_1(x)
-
-        x_list.append(x)
-
-      # linear layers
-      x = tf.concat(x_list, axis=1)
-      x = self.fc_1(x)
-
-      # output layer
       out = self.out(x)
 
-      return out 
+      return out
+
