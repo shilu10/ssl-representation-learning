@@ -5,6 +5,7 @@ import os, sys, shutil
 from typing import Union
 
 
+
 class LRNLayer(tf.keras.layers.Layer):
     def __init__(self, local_size=1, alpha=1.0, beta=0.75, **kwargs):
         self.local_size = local_size
