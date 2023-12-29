@@ -8,12 +8,12 @@ import numpy as np
 import argparse 
 from augment import JigSaw
 from typing import Union
-from utils import RotateNetDataLoader, PretextTaskDataGenerator
+from utils import RotateNetDataLoader, PretextTaskDataGenerator, ContextPredictionDataLoader
 from backbone import AlexNet as alex, AlexnetV1
 from datetime import datetime 
 import itertools
 import matplotlib.pyplot as plt 
-
+from architectures.pretext_task.AlexNetContextPrediction import AlexNet
 
 AUTO = tf.data.experimental.AUTOTUNE
 
@@ -44,9 +44,13 @@ def parse_args():
 	parser.add_argument('--shuffle', type=bool, default=True)
 	parser.add_argument('--grid_size', type=Union[tuple, int], default=(3, 3))
 
-	parser.add_argument('--pretext_task_type', type=str, default='jigsaw', choices=['jigsaw', 'rotation'])
+	parser.add_argument('--pretext_task_type', type=str, 
+					default='jigsaw', choices=['jigsaw', 'rotation', 'context_prediction'])
 
 	parser.add_argument('--use_all_rotations', type=bool, default=False)
+
+	parser.add_argument('--patch_dim', type=int, default=15)
+	parser.add_argument('--gap', type=int, default=2)
 
 	return parser.parse_args()
 
@@ -106,6 +110,10 @@ def main(args):
 											shuffle=args.shuffle
 										).get_dataset()
 
+	else:
+		train_dataset = ContextPredictionDataLoader(args, image_files_path, shuffle=True, batch_size=args.batch_size)
+		train_dataset = train_dataset.get_dataset()
+
 	'''
 	# Apply optimizations
 	dataset = tf.data.Dataset.from_generator(
@@ -125,7 +133,11 @@ def main(args):
 
 	# network 
 	if args.pretext_task_type == 'jigsaw':
-	network = AlexNet(args.num_classes)
+		network = alex(args.num_classes)
+
+	elif args.pretext_task_type == 'context_prediction':
+		network = AlexNet(args.num_classes)
+	
 
 	# optimizer
 	optimizer = tf.keras.optimizers.Adam()
@@ -187,13 +199,16 @@ def main(args):
 	for epoch in range(args.num_epochs):
 		print("\nepoch {}/{}".format(epoch+1, args.num_epochs))
 
+		values = [('loss', 0.0), ('top1_acc', 0.0), ('top5_acc', 0.0)]
+		val_values = [('val_loss', 0.0), ('val_top1_acc', 0.0), ('val_top5_acc', 0.0)]
+		progbar.add(0, values=values)
+		progbar.add(0, values=val_values)
+
 		# train step
 		for step, batch in enumerate(train_dataset):
 
 			# initial updation of val progbar
-			val_values = [('val_loss', 0.0), ('val_top1_acc', 0.0), ('val_top5_acc', 0.0)]
-			progbar.add(0, values=val_values)
-
+			
 			result = train(
 					network = network,
 					batch = batch,

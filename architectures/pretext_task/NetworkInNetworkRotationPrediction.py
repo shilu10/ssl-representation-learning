@@ -17,12 +17,14 @@ class BasicBlock(tf.keras.Model):
     def call(self, x):
         return self._layers(x)
 
+
 class GlobalAveragePooling(tf.keras.Model):
     def __init__(self):
         super(GlobalAveragePooling, self).__init__()
 
     def call(self, feat):
         return tf.reduce_mean(feat, axis=[1, 2])
+
 
 class NetworkInNetwork(tf.keras.Model):
     def __init__(self, num_classes, num_stages, use_avg_on_conv3):
@@ -129,6 +131,7 @@ class NetworkInNetwork(tf.keras.Model):
     out_feats = out_feats[0] if len(out_feats)==1 else out_feats
 
     return out_feats
+    
 
 def create_model(num_classes=4, num_stages=5, use_avg_on_conv3):
     return NetworkInNetwork(num_classes=num_classes, num_stages=num_stages, use_avg_on_conv3=use_avg_on_conv3)
