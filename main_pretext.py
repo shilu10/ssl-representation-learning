@@ -8,7 +8,7 @@ import numpy as np
 import argparse 
 from augment import JigSaw
 from typing import Union
-from utils import RotateNetDataLoader, PretextTaskDataGenerator, ContextPredictionDataLoader
+from utils import RotateNetDataLoader, PretextTaskDataGenerator, ContextPredictionDataLoader, ImageDataLoader
 from backbone import AlexNet as alex, AlexnetV1
 from datetime import datetime 
 import itertools
@@ -111,8 +111,9 @@ def main(args):
 										).get_dataset()
 
 	else:
-		train_dataset = ContextPredictionDataLoader(args, image_files_path, shuffle=True, batch_size=args.batch_size)
-		train_dataset = train_dataset.get_dataset()
+		labels = np.arange(len(image_files_path))
+		train_dataset = ImageDataLoader(args, image_files_path, labels, shuffle=True, batch_size=args.batch_size)
+		train_dataset = train_dataset.create_dataset()
 
 	'''
 	# Apply optimizations
