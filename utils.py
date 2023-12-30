@@ -535,7 +535,7 @@ class ContextPredictionDataLoader(object):
         return dataset
         
 
-class ImageDataLoader:
+class ContextPredictionDataLoader:
     def __init__(self, args, image_files_path, labels, batch_size=32, shuffle=True):
         self.args = args
         self.image_files_path = image_files_path
