@@ -133,3 +133,114 @@ class ContextEncoder(tf.keras.models.Model):
         out = self.conv_bottleneck(x)
         
         return out
+    
+
+class ContextDeocder(tf.keras.models.Model):
+    def __init__(self, bottleneck_dim, out_size, out_channels, *args, **kwargs):
+        super(ContextDeocder, self).__init__(*args, **kwargs)
+        self.bottleneck_dim = bottleneck_dim
+        self.out_channels = out_channels 
+        self.out_size = out_size
+        
+        len_channel_sizes = 4 if out_size in (64, 128) else 3
+        n_channels = [64 * 2 ** i for i in range(len_channel_sizes - 1, -1, -1)]
+        
+        self.bn1 = tf.keras.layers.BatchNormalization()
+        self.relu1 = tf.keras.layers.LeakyReLU(alpha=0.2)
+        self.bottleneck_block = TransposeBlock(
+                n_channels[0], kernel_size=4, strides=1, padding='valid'
+        )
+        
+        blocks = [
+            TransposeBlock(
+                 n_channels[i + 1], kernel_size=4, strides=2, padding='same'
+            )
+            for i in range(len_channel_sizes - 1)
+        ]
+        
+        if out_size == 128:
+            blocks.append(
+                TransposeBlock(
+                    n_channels[-1], kernel_size=4, strides=2, padding='same'
+                )
+            )
+            
+        self.blocks = tf.keras.Sequential(blocks)
+
+        self.final_conv = tf.keras.layers.Conv2DTranspose(
+                out_channels, kernel_size=4, strides=2, padding='same', use_bias=False
+        )
+        self.tanh = tf.keras.layers.Activation('tanh')
+        
+    def call(self, inputs, training=False):
+        x = self.relu1(self.bn1(inputs))
+        x = self.bottleneck_block(x)
+        x = self.blocks(x)
+        out = self.tanh(self.final_conv(x))
+        
+        return out
+    
+
+class ContextGenerator(tf.keras.models.Model):
+    def __init__(self, bottleneck_dim, img_size, out_size, channels, *args, **kwargs):
+        super(ContextGenerator, self).__init__(*args, **kwargs)
+        self.bottleneck_dim = bottleneck_dim
+        self.img_size = img_size 
+        self.out_size = out_size 
+        self.channels = channels 
+        
+        self.context_encoder = ContextEncoder(bottleneck_dim, img_size, channels)
+        self.context_decoder = ContextDeocder(bottleneck_dim, out_size, channels)
+        
+    def call(self, inputs, training=False):
+        x = self.context_encoder(inputs)
+        x = self.context_decoder(x)
+        
+        return x 
+    
+    
+class ContextDiscriminator(tf.keras.Model):
+    def __init__(self, in_channels=3, input_size: int = 128, *args, **kwargs):
+        super(ContextDiscriminator, self).__init__(*args, **kwargs)
+        self.in_channels = in_channels
+        self.input_size = input_size 
+        
+        len_channel_sizes = 4 if input_size in (64, 128) else 3
+        n_channels = [64 * 2 ** i for i in range(len_channel_sizes)]
+        
+        self.conv1 = tf.keras.layers.Conv2D(
+            n_channels[0], kernel_size=4, strides=2, padding='same', use_bias=False
+        )
+        self.relu1 = tf.keras.layers.LeakyReLU(alpha=0.2)
+        
+        blocks = []
+        if input_size == 128:
+            blocks.append(
+                BasicBlock(
+                    n_channels[0], kernel_size=4, strides=2, padding='same'
+                )
+            )
+            
+        blocks.extend(
+            [
+                BasicBlock(
+                    n_channels[i + 1], kernel_size=4, strides=2, padding='same'
+                )
+                for i in range(len_channel_sizes - 1)
+            ]
+        )
+        self.blocks = tf.keras.Sequential(blocks)
+
+        self.final_conv = tf.keras.layers.Conv2D(n_channels[-1], padding='same', kernel_size=4, use_bias=False)
+        self.gap = tf.keras.layers.GlobalAveragePooling2D()
+        self.out = tf.keras.layers.Dense(1, activation='sigmoid')
+       # self.sigmoid = tf.keras.layers.Activation('sigmoid')
+        
+    def call(self, inputs, training=False):
+        x = self.relu1(self.conv1(inputs))
+        x = self.blocks(x)
+        x = self.final_conv(x)
+        x = self.gap(x)
+        x = self.out(x)
+        
+        return x
