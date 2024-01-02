@@ -1,0 +1,4 @@
+from .alexnet_context_prediction import AlexNetContextPrediction
+from .alexnet_jigsaw import AlexNetJigSaw
+from .network_in_network import NetworkInNetwork
+from .alexnet_rotation_prediction import AlexNetRotationPrediction

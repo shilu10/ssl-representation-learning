@@ -15,7 +15,8 @@ class ContextPredictionDataLoader:
     def __init__(self, 
     			args, 
     			image_files_path, 
-    			labels, split_type='train', 
+    			labels, 
+    			split_type='train', 
     			batch_size=32, 
     			shuffle=True):
 
@@ -26,12 +27,8 @@ class ContextPredictionDataLoader:
         self.shuffle = shuffle
         self.split_type = split_type
 
-        self.indexes = np.arange(len(self.image_files_path))
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
-
     def preprocess_image(self, image_path, label):
-    	
+
         patch_dim, gap = self.args.patch_dim, self.args.gap
 
         raw = tf.io.read_file(image_path)
@@ -83,7 +80,7 @@ class ContextPredictionDataLoader:
         dataset = dataset.map(lambda x, y: tuple(tf.numpy_function(self.preprocess_image, [x, y], [tf.float32, tf.int32])))
 
         # Batch the dataset
-        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.batch(self.batch_size, drop_remainder=True)
 
         dataset = dataset.prefetch(AUTO)
 
