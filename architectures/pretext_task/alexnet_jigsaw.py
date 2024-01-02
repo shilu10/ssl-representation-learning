@@ -2,8 +2,10 @@ import tensorflow as tf
 from tensorflow import keras 
 import numpy as np 
 import os, sys, shutil 
+from typing import Union
 
 
+@tf.keras.saving.register_keras_serializable()
 class LRNLayer(tf.keras.layers.Layer):
     def __init__(self, local_size=1, alpha=1.0, beta=0.75, **kwargs):
         self.local_size = local_size
@@ -17,17 +19,20 @@ class LRNLayer(tf.keras.layers.Layer):
     def get_config(self):
         config = super().get_config()
 
-        config.update(
-            {
-                'local_size': self.local_size
-                'alpha': self.alpha,
-                'beta': self.beta
-            }
-        )
+        config.update({
+            'local_size': self.local_size,
+            'alpha': self.alpha,
+            'beta': self.beta
+            })
 
-        return config
+        return config 
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
+@tf.keras.saving.register_keras_serializable()
 class ConvLayer(tf.keras.layers.Layer):
     def __init__(self, 
               kernel_size: tuple = (3, 3), 
@@ -97,23 +102,28 @@ class ConvLayer(tf.keras.layers.Layer):
             {
                 'kernel_size': self.kernel_size,
                 'filters': self.filters,
-                'strides': self.strides,
                 'padding': self.padding,
-                'groups':self.groups,
+                'groups': self.groups,
+                'strides': self.strides,
                 'use_act': self.use_act,
                 'act_type': self.act_type,
                 'use_pooling': self.use_pooling,
                 'pooling_type': self.pooling_type,
                 'pool_size': self.pool_size,
                 'pool_strides': self.pool_strides,
-                'pool_padding': self.pool_padding,
+                'pool_padding': self.pool_padding
 
             }
         )
 
         return config
 
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+        
 
+@tf.keras.saving.register_keras_serializable()
 class LinearLayer(tf.keras.layers.Layer):
     def __init__(self, 
               units: int = 1028, 
@@ -171,10 +181,15 @@ class LinearLayer(tf.keras.layers.Layer):
 
         return config
 
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
-class AlexNet(tf.keras.models.Model):
-    def __init__(self, n_classes=1000, *args, **kwargs):
-        super(AlexNet, self).__init__(*args, **kwargs)
+
+class AlexNetJigSaw(tf.keras.models.Model):
+    def __init__(self, config, n_classes=1000, *args, **kwargs):
+        super(AlexNetJigSaw, self).__init__(*args, **kwargs)
+        self.config = config
         self.n_classes = n_classes
 
         self.conv_1 = ConvLayer(kernel_size=11, 
@@ -262,12 +277,12 @@ class AlexNet(tf.keras.models.Model):
             x = self.conv_1(inputs[i])
             x = self.lrn_1(x)
 
-            x = self.conv_1(x)
+            x = self.conv_2(x)
             x = self.lrn_2(x)
 
-            x = self.conv_1(x)
-            x = self.conv_1(x)
-            x = self.conv_1(x)
+            x = self.conv_3(x)
+            x = self.conv_4(x)
+            x = self.conv_5(x)
 
             x = self.flatten(x)
             x = self.fc_1(x)
@@ -293,3 +308,29 @@ class AlexNet(tf.keras.models.Model):
         )
 
         return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+def create_model(config, n_classes):
+    return AlexNetJigSaw(config=config, n_classes=n_classes)
+
+
+if __name__ == '__main__':
+    
+    class Config:
+        def __init__(self):
+            self.num_stages = num_stages
+            self.use_avg_on_conv3 = use_avg_on_conv3
+
+    config = Config()
+
+    model = create_model(config, 4)
+
+    x = tf.random.uniform((1, size, size, 3), -1, 1)
+    out = model(x, None)
+
+    for f, feat in enumerate(out):
+        print(f'Output feature conv{f+1} - size {feat.shape}')

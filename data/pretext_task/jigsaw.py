@@ -30,10 +30,6 @@ class JigSawDataLoader:
         self.batch_size = batch_size
         self.shuffle = shuffle
 
-        self.indexes = np.arange(len(self.image_files_path))
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
-
     def preprocess_image(self, image_path, label):
         value = tf.io.read_file(image_path)
         shape = tf.image.extract_jpeg_shape(value)
@@ -66,7 +62,7 @@ class JigSawDataLoader:
             grid_size = (grid_size, grid_size)
 
         height, width, channels = cropped_image.shape
-
+        
         coordinates = []
         for i in range(grid_size[0]):
             for j in range(grid_size[1]):
@@ -80,7 +76,6 @@ class JigSawDataLoader:
             randomy = tf.experimental.numpy.random.randint(0, 10)
             #clip = grid[randomx: randomx+64, randomy:randomy+64, :]
             grids.append(grid)
-
             
         grids = tf.convert_to_tensor(grids)
 
@@ -88,8 +83,8 @@ class JigSawDataLoader:
         n_grid = grid_size[0] * grid_size[1]
 
         #print(grids.shape)
-        tiles = tf.image.random_crop(grids, (-1, 64, 64, 3))
-
+        tiles = tf.image.random_crop(grids, (grids.shape[0], 64, 64, 3))
+        
         r_index = tf.random.uniform([], minval=0, maxval=self.num_classes, dtype=tf.dtypes.int32)
         selected_permutation = self.permutations[r_index.numpy()]
 
@@ -107,7 +102,7 @@ class JigSawDataLoader:
 
         return all_perm
 
-    def get_dataset(self):
+    def create_dataset(self):
         
         # Convert file paths and labels to TensorFlow tensors
         image_files_tensor = tf.constant(self.image_files_path)
@@ -116,14 +111,14 @@ class JigSawDataLoader:
         # Create a tf.data.Dataset from the tensors
         dataset = tf.data.Dataset.from_tensor_slices((image_files_tensor, labels_tensor))   
         
-        if self.args.shuffle:
+        if self.shuffle:
             dataset = dataset.shuffle(buffer_size=len(self.image_files_path), reshuffle_each_iteration=True)
 
 
         # for parallel preprocessing
         dataset = dataset.map(lambda x, y:  tf.py_function(self.preprocess_image, [x, y], [tf.float32, tf.int32]))
 
-        dataset = dataset.batch(self.args.batch_size, drop_remainder=True)
+        dataset = dataset.batch(self.batch_size, drop_remainder=True)
         dataset = dataset.prefetch(AUTO)
 
         return dataset

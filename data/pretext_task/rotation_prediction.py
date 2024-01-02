@@ -11,27 +11,26 @@ from datetime import datetime
 AUTO = tf.data.experimental.AUTOTUNE
 
 
-class RotateNetDataLoader(object):
+class RotateNetDataLoader:
     def __init__(self, 
+                args,
                 image_files_path, 
                 labels, 
-                rotations=[0, 90, 180, 270], 
-                use_all_rotations=False, 
                 split_type='train',
                 batch_size=32,
                 shuffle=True):
-
+        
+        self.args = args
         self.image_files_path = image_files_path
         self.labels = labels
-        self.rotations = rotations
-        self.use_all_rotations = use_all_rotations
+        self.num_classes = args.num_classes
+
         self.split_type = split_type
         self.batch_size = batch_size
         self.shuffle = shuffle
 
-        self.indexes = np.arange(len(self.image_files_path))
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
+        self.rotations= args.rotations
+        self.use_all_rotations= args.use_all_rotations
 
     def parse_file(self, image_path, label=None):
         raw = tf.io.read_file(image_path)
@@ -41,13 +40,14 @@ class RotateNetDataLoader(object):
 
         return tf.data.Dataset.from_tensors(raw)
 
-    def preprocess_image(self, value, rotation_index):
+    def preprocess_image(self, value, label):
         shape = tf.image.extract_jpeg_shape(value)
 
         image = tf.image.decode_jpeg(value, channels=3)
 
         # augmentation
         image = self.augmentation(image)
+        rotation_index = tf.random.uniform([], minval=0, maxval=self.num_classes, dtype=tf.dtypes.int32)
         rotation_value = self.rotations[rotation_index]
 
         # rotate the image
@@ -88,7 +88,7 @@ class RotateNetDataLoader(object):
 
         return cropped_image
 
-    def get_dataset(self):
+    def create_dataset(self):
         # Convert file paths and labels to TensorFlow tensors
         image_files_tensor = tf.constant(self.image_files_path)
         labels_tensor = tf.constant(self.labels)
@@ -97,7 +97,7 @@ class RotateNetDataLoader(object):
             dataset = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor([], dtype=tf.string))
             indices = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor([], dtype=tf.int32))
 
-            dataset = tf.dat.Dataset.zip((dataset, indices))
+            dataset = tf.data.Dataset.zip((dataset, indices))
 
             for _ in range(len(self.rotations)):
 
@@ -109,10 +109,10 @@ class RotateNetDataLoader(object):
 
         if self.shuffle:
             dataset = dataset.shuffle(buffer_size=len(self.image_files_path), reshuffle_each_iteration=True)
-
+        
         dataset = dataset.interleave(self.parse_file, num_parallel_calls=AUTO)
         dataset = dataset.map(lambda x, y:  tf.py_function(self.preprocess_image, [x, y], [tf.float32, tf.int32]))
-        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.batch(self.batch_size, drop_remainder=True)
         dataset = dataset.prefetch(AUTO)
 
         return dataset
