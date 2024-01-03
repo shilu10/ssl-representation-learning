@@ -44,6 +44,7 @@ class BasicBlock(tf.keras.layers.Layer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
     
 @tf.keras.saving.register_keras_serializable()   
 class TransposeBlock(tf.keras.layers.Layer):
@@ -200,7 +201,7 @@ class ContextGenerator(tf.keras.models.Model):
     
     
 class ContextDiscriminator(tf.keras.Model):
-    def __init__(self, in_channels=3, input_size: int = 128, *args, **kwargs):
+    def __init__(self, input_size: int = 128, in_channels=3, *args, **kwargs):
         super(ContextDiscriminator, self).__init__(*args, **kwargs)
         self.in_channels = in_channels
         self.input_size = input_size 
@@ -234,7 +235,6 @@ class ContextDiscriminator(tf.keras.Model):
         self.final_conv = tf.keras.layers.Conv2D(n_channels[-1], padding='same', kernel_size=4, use_bias=False)
         self.gap = tf.keras.layers.GlobalAveragePooling2D()
         self.out = tf.keras.layers.Dense(1, activation='sigmoid')
-       # self.sigmoid = tf.keras.layers.Activation('sigmoid')
         
     def call(self, inputs, training=False):
         x = self.relu1(self.conv1(inputs))
@@ -244,3 +244,16 @@ class ContextDiscriminator(tf.keras.Model):
         x = self.out(x)
         
         return x
+
+
+if __name__ == '__main__':
+
+	inputs = tf.random.uniform((2, 128, 128, 3))
+
+	context_generator = ContextGenerator(1024, 128, 128, 3)
+	context_discriminator = ContextDiscriminator(128, 3)
+
+	c_gen_output = context_generator(inputs)
+	c_dis_output = context_discriminator(c_gen_output)
+
+	print(f'Discrimnator Ouput: {c_dis_output}')
