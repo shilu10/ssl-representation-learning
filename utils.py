@@ -787,3 +787,31 @@ def get_l2_weights(args, prediction_size, masked_region=None):
 
 def weighted_mse_loss(outputs, targets, weights):
     return tf.pow(tf.reduce-mean(weights * (outputs - targets)), 2)
+
+
+    
+def get_optimizer(optim_type, learning_rate, *args, **kwargs):
+    if optim_type == 'adam':
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+
+
+    return optimizer
+
+
+def get_criterion(criterion_type, reduction_type=None, from_logits=False):
+    if criterion_type == 'mse':
+        loss_func = tf.keras.losses.MeanSquaredError(
+                            reduction='auto',
+                            name='mean_squared_error')
+
+    elif criterion_type == 'bce':
+        loss_func = tf.keras.losses.BinaryCrossentropy(from_logits)
+
+    elif criterion_type == 'sparse_categorical_ce':
+        loss_func = tf.keras.losses.SparseCategoricalCrossentropy(from_logits)
+
+    elif criterion_type == 'categorical_ce':
+        loss_func = tf.keras.losses.CategoricalCrossentropy(from_logits)
+
+
+    return loss_func
