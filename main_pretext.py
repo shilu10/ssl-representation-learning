@@ -15,8 +15,8 @@ import itertools
 import matplotlib.pyplot as plt 
 import architectures.pretext_task as networks
 import data.pretext_task as dataloaders
-from utils import get_optimizer, get_criterion
-
+from utils import get_optimizer, get_criterion, load_module_from_source
+from utils import get_l2_weights, get_center_block_mask, get_random_region_mask, generate_random_pattern, get_random_block_mask
 
 AUTO = tf.data.experimental.AUTOTUNE
 
@@ -79,6 +79,11 @@ def parse_args():
 						type=float, default=0.2, 
 						help="amount of data need for validation")
 
+	parser.add_argument('--shuffle',
+					   type=bool, 
+					   default=True, 
+					   help='whether or not to shuffle the dataset')
+
 	#parser.add_argument('--permutation_arr_path', type=str, default='permutation_max_1000.npy')
 
 	#parser.add_argument('--shuffle', type=bool, default=True)
@@ -120,6 +125,15 @@ def main(args):
 	#else: 
 	#	print('CPU mode')
 
+	#---------------------------
+	# Load config
+	#---------------------------
+
+	module_name = "config"
+	file_path = args.config_path
+
+	config = load_module_from_source(module_name, file_path)
+
 
 	# ---------------------------
 	# Train and Val image splits
@@ -142,11 +156,22 @@ def main(args):
 	#------------------------
 	# Dataloaders
 	#------------------------
-	train_dataloader = getattr(dataloaders, config.dataloader.name).create_dataset()
+	train_dataloader = getattr(dataloaders, config.dataloader.get('name'))
+	train_dataloader = train_dataloader(args=config, 
+										image_files_path=train_image_files_path, 
+										labels=train_labels, 
+										batch_size=args.batch_size, 
+										shuffle=args.shuffle).create_dataset()
 
 	# val dataloader
 	if args.use_validation:
-		val_dataloader = getattr(dataloaders, config.dataloader.name).create_dataset()
+		val_dataloader = getattr(dataloaders, config.dataloader.get('name'))
+		val_dataloader = val_dataloader(args=config, 
+										image_files_path=train_image_files_path, 
+										labels=train_labels, 
+										batch_size=args.batch_size, 
+										shuffle=args.shuffle).create_dataset()
+
 
 	iter_per_epoch = int(len(image_files_path) / args.batch_size)
 
@@ -156,51 +181,54 @@ def main(args):
 	# Load Network
 	#------------------------
 	if args.pretext_task_type == 'context_encoder':
-		mask_size = int(np.sqrt(args.mask_area) * args.image_size)
+		img_size = config.model.get('img_size')
+		mask_area = config.model.get('mask_area')
+		mask_size = int(np.sqrt() * img_size
+
 		if config.model.random_masking:
-			global_random_pattern = generate_random_pattern(mask_read=config.model.mask_area, 
-														   resolution=config.model.resolution, 
-														   max_pattern_size=config.model.max_pattern_size)
-			out_size = config.model.img_size 
+			out_size = img_size
 		else:
 			out_size = mask_size
 
-		context_generator = getattr(networks, config.networks.generator_name)
-		context_generator = context_generator(bottleneck_dim=config.main.bottleneck_dim, 
-											img_size=config.main.img_size, 
+		context_generator = getattr(networks, config.networks.get('generator_name'))
+		context_generator = context_generator(bottleneck_dim=config.main.get('bottleneck_dim'), 
+											img_size=img_size, 
 											out_size=out_size, 
 											channels=3)
 
-		context_discriminator = getattr(networks, config.networks.discriminator_name)
+		context_discriminator = getattr(networks, config.networks.get('discriminator_name'))
 		context_discriminator = context_discriminator(input_size=out_size, in_channels=3)
 
 	else:
-		network = getattr(networks, config.networks.name)
-
+		network = getattr(networks, config.networks.get('name'))
+		network = network(config=config, 
+						 n_classes=config.model.get('num_classes'),
+						 name=args.pretext_task_type)
 	
 	#-----------------------
 	# Load Optimizer
 	# ----------------------
 	if args.pretext_task_type == 'context_encoder':
-		g_optimizer = get_optimizer(optim_type=config.optimizer.generator_type, 
-									learning_rate=config.optimizer.generator_lr)
-		d_optimizer = get_optimizer(optim_type=config.optimizer.discriminator_type, 
-									learning_rate=config.optimizer.discriminator_lr)
+		g_optimizer = get_optimizer(optim_type=config.optimizer.get('generator_type'), 
+									learning_rate=config.optimizer.get('generator_lr'))
+		d_optimizer = get_optimizer(optim_type=config.optimizer.get('discriminator_type'), 
+									learning_rate=config.optimizer.get('discriminator_lr'))
 
 	else:
-		optimizer = get_optimizer(optim_type=config.optimizer.type, 
-								learning_rate=config.optimizer.lr)
+		optimizer = get_optimizer(optim_type=config.optimizer.get('type'), 
+								learning_rate=config.optimizer.get('lr'))
 
+	#if config.optimizer.get('use_lr_scheduler'):
 
 	#-------------------------------
 	# Load Loss Function(criterion)
 	# -------------------------------
 	if args.pretext_task_type == 'context_encoder':
-		adversial_criterion = get_criterion(config.criterion.adversial_type)
-		reconstruction_criterion = get_criterion(config.criterion.reconstruction_type)
+		adversial_criterion = get_criterion(config.criterion.get('adversial_type'))
+		reconstruction_criterion = get_criterion(config.criterion.get('reconstruction_type'))
 
 	else:
-		criterion = get_criterion(config.criterion.type, from_logits=True)
+		criterion = get_criterion(config.criterion.get('type'), from_logits=True)
 
 
 	#--------------------------------
@@ -301,6 +329,9 @@ def main(args):
 	# Start train and val
 	#----------------------
 	if config.model.random_masking:
+		global_random_pattern = generate_random_pattern(mask_area=config.model.get('mask_area'), 
+														resolution=config.model.get('resolution'), 
+														max_pattern_size=config.model.get('max_pattern_size'))
 
 
 	for epoch in range(args.num_epochs):
@@ -321,13 +352,20 @@ def main(args):
 				samples, _ = batch
 
 				if not args.random_masking:
-	                true_masks, masked_samples, _ = get_center_block_mask(samples.numpy(), mask_size, args.overlap)
+	                true_masks, masked_samples, _ = get_center_block_mask(samples=samples.numpy(), 
+	                													mask_size=mask_size,
+	                													overlap=args.model.get('overlap'))
+	               
 	                masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 	                true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
 	                masked_region = None
 
 	            else:
-	                masked_samples, masked_region = get_random_region_mask(samples.numpy(), args.img_size, args.mask_area, global_random_pattern)
+	                masked_samples, masked_region = get_random_region_mask(samples=samples.numpy(), 
+	                													img_size=args.model.get('img_size'),
+	                													mask_area=args.model.get('mask_area'),
+	                													global_random_pattern=global_random_pattern)
+
 	                masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 	                true_masks = samples
 
