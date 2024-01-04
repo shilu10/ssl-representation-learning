@@ -13,7 +13,10 @@ from backbone import AlexNet as alex, AlexnetV1
 from datetime import datetime 
 import itertools
 import matplotlib.pyplot as plt 
-from architectures.pretext_task.AlexNetContextPrediction import AlexNet
+import architectures.pretext_task as networks
+import data.pretext_task as dataloaders
+from utils import get_optimizer, get_criterion
+
 
 AUTO = tf.data.experimental.AUTOTUNE
 
@@ -21,41 +24,84 @@ AUTO = tf.data.experimental.AUTOTUNE
 def parse_args():
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--chkpt_step', type=int, default=5)
+	# model, save, load args
+	parser.add_argument('--checkpoint', 
+						type=str, 
+						default="./checkpoint/", 
+						help='checkpoint directory path')
 
-	parser.add_argument('--num_classes', type=int, default=1000)
-	parser.add_argument('--model_type', type=str, default='jigsaw')
-	parser.add_argument('--unlabeled_datapath', type=str, default='./stl10/unlabeled_images/')
+	parser.add_argument('--tensorboard', 
+						type=str, 
+						default='./logs/', 
+						help="tensorboard directory path")
+
+	parser.add_argument('--chkpt_step', 
+						type=int, 
+						default=5, 
+						help='how frequently to save checkpoint')
+
+	parser.add_argument('--gpu',
+						default=0, 
+						type=int, 
+						help='gpu id')
+
+	#parser.add_argument('--num_classes', type=int, default=1000)
+	# model type and dataloader args
+	parser.add_argument('--pretext_task_type', 
+						type=str, 
+						default='jigsaw', 
+						choices=['jigsaw', 'rotation', 'context_prediction', 'context_encoder'],
+						help='type of pretext task')
+
+	parser.add_argument('--unlabeled_datapath', 
+						type=str, 
+						default='./stl10/unlabeled_images/',
+						help='directory path to unlabeled data')
 	
-	parser.add_argument('--num_epochs', type=int, default=100)
-	parser.add_argument('--batch_size', type=int, default=32)
-	parser.add_argument('--lr', type=float, default=0.001)
+	# model training args
+	parser.add_argument('--num_epochs',
+					   type=int, 
+					   default=100, 
+					   help='number of epoch to train a model')
 
-	parser.add_argument('--checkpoint', type=str, default="./checkpoint/")
-	parser.add_argument('--tensorboard', type=str, default='./logs/')
+	parser.add_argument('--batch_size', 
+						type=int, 
+						default=32, 
+						help="number of batch")
+	#parser.add_argument('--lr', type=float, default=0.001)
 
-	parser.add_argument('--gpu', default=0, type=int, help='gpu id')
+	parser.add_argument('--use_validation', 
+						default=False,
+						type=bool, 
+						help='to use validation or not, if True it splits the unlabeled data into train and val')
 
-	parser.add_argument('--use_validation', default=False, type=bool)
-	parser.add_argument('--val_split_size', type=float, default=0.5)
+	parser.add_argument('--val_split_size', 
+						type=float, default=0.2, 
+						help="amount of data need for validation")
 
-	parser.add_argument('--permutation_arr_path', type=str, default='permutation_max_1000.npy')
+	#parser.add_argument('--permutation_arr_path', type=str, default='permutation_max_1000.npy')
 
-	parser.add_argument('--shuffle', type=bool, default=True)
-	parser.add_argument('--grid_size', type=Union[tuple, int], default=(3, 3))
+	#parser.add_argument('--shuffle', type=bool, default=True)
+	#parser.add_argument('--grid_size', type=Union[tuple, int], default=(3, 3))
 
-	parser.add_argument('--pretext_task_type', type=str, 
-					default='jigsaw', choices=['jigsaw', 'rotation', 'context_prediction'])
+	
 
-	parser.add_argument('--use_all_rotations', type=bool, default=False)
+	#parser.add_argument('--use_all_rotations', type=bool, default=False)
 
-	parser.add_argument('--patch_dim', type=int, default=15)
-	parser.add_argument('--gap', type=int, default=2)
+	#parser.add_argument('--patch_dim', type=int, default=15)
+	#parser.add_argument('--gap', type=int, default=2)
+
+	# config
+	parser.add_argument('--config_path', 
+						type=str, 
+						default='config/', 
+						help='config path for specific pretext task')
 
 	return parser.parse_args()
 
 
 def main(args):
+	global_random_pattern = None
 	
 	# assertion errors
 	if args.pretext_task_type == 'jigsaw':
@@ -75,7 +121,9 @@ def main(args):
 	#	print('CPU mode')
 
 
-	# trainloader and val dataloader 
+	# ---------------------------
+	# Train and Val image splits
+	# --------------------------
 	image_files_path = list(paths.list_images(args.unlabeled_datapath))
 	
 	if args.use_validation:
@@ -90,58 +138,86 @@ def main(args):
 		train_image_files_path = image_files_path
 		train_labels = [np.random.randint(0, 10) for _ in range(len(train_image_files_path))]
 
-	#-------------------------
+
+	#------------------------
 	# Dataloaders
 	#------------------------
+	train_dataloader = getattr(dataloaders, config.dataloader.name).create_dataset()
 
-
-	'''
-	# Apply optimizations
-	dataset = tf.data.Dataset.from_generator(
-		generator=lambda: iter(data_loader),
-		output_signature=(
-			tf.TensorSpec(shape=(None, None, None, None, 3), dtype=tf.float32),
-			tf.TensorSpec(shape=(None,), dtype=tf.int32)
-		)
-	)
-
-	dataset = dataset.shuffle(buffer_size=10000)
-	dataset = dataset.batch(args.batch_size)
-	dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-	'''
+	# val dataloader
+	if args.use_validation:
+		val_dataloader = getattr(dataloaders, config.dataloader.name).create_dataset()
 
 	iter_per_epoch = int(len(image_files_path) / args.batch_size)
 
-	# network 
-	if args.pretext_task_type == 'jigsaw':
-		network = alex(args.num_classes)
+	tf.print(f"Iteration Per Epochs: {iter_per_epoch}")
 
-	elif args.pretext_task_type == 'context_prediction':
-		network = AlexNet(args.num_classes)
+	#------------------------
+	# Load Network
+	#------------------------
+	if args.pretext_task_type == 'context_encoder':
+		mask_size = int(np.sqrt(args.mask_area) * args.image_size)
+		if config.model.random_masking:
+			global_random_pattern = generate_random_pattern(mask_read=config.model.mask_area, 
+														   resolution=config.model.resolution, 
+														   max_pattern_size=config.model.max_pattern_size)
+			out_size = config.model.img_size 
+		else:
+			out_size = mask_size
+
+		context_generator = getattr(networks, config.networks.generator_name)
+		context_generator = context_generator(bottleneck_dim=config.main.bottleneck_dim, 
+											img_size=config.main.img_size, 
+											out_size=out_size, 
+											channels=3)
+
+		context_discriminator = getattr(networks, config.networks.discriminator_name)
+		context_discriminator = context_discriminator(input_size=out_size, in_channels=3)
+
+	else:
+		network = getattr(networks, config.networks.name)
+
 	
+	#-----------------------
+	# Load Optimizer
+	# ----------------------
+	if args.pretext_task_type == 'context_encoder':
+		g_optimizer = get_optimizer(optim_type=config.optimizer.generator_type, 
+									learning_rate=config.optimizer.generator_lr)
+		d_optimizer = get_optimizer(optim_type=config.optimizer.discriminator_type, 
+									learning_rate=config.optimizer.discriminator_lr)
 
-	# optimizer
-	optimizer = tf.keras.optimizers.Adam()
-	# get_optimizer()
+	else:
+		optimizer = get_optimizer(optim_type=config.optimizer.type, 
+								learning_rate=config.optimizer.lr)
 
-	# criterion
-	criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-	# get_criterion()
 
-	# checkpoint 
+	#-------------------------------
+	# Load Loss Function(criterion)
+	# -------------------------------
+	if args.pretext_task_type == 'context_encoder':
+		adversial_criterion = get_criterion(config.criterion.adversial_type)
+		reconstruction_criterion = get_criterion(config.criterion.reconstruction_type)
+
+	else:
+		criterion = get_criterion(config.criterion.type, from_logits=True)
+
+
+	#--------------------------------
+	# Load Checkpoint
+	#--------------------------------
 	if args.pretext_task_type == "context_encoder":
 		# checkpoint 
 		ckpt = tf.train.Checkpoint(step=tf.Variable(1), 
-								  generator=generator, 
-								  discriminator=discriminator, 
-								  g_optim=g_optim, 
-								  d_optim=d_optim)
+								  context_generator=context_generator, 
+								  context_discriminator=context_discriminator, 
+								  g_optim=g_optimizer, 
+								  d_optim=d_optimizer)
 	
 	else:
 		ckpt = tf.train.Checkpoint(step=tf.Variable(1), 
 								  optimizer=optimizer, 
 								  net=network)
-								 # iterator=iter(dataset))
 
 	manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=3)
 
@@ -153,7 +229,10 @@ def main(args):
 	else:
 		print("Initializing network from scratch.")
 
-	# metric trackers
+
+	#------------------------------
+	# Load Trackers
+	#------------------------------
 	if args.pretext_task_type == 'context_encoder':
 		gen_total_loss_tracker = tf.keras.metrics.Mean(name='total_gen_loss_tracker')
 		gen_adv_loss_tracker = tf.keras.metrics.Mean(name='gen_adv_loss_tracker')
@@ -184,7 +263,9 @@ def main(args):
 			val_gen_recon_loss_tracker = tf.keras.metrics.Mean(name='gen_recon_loss_tracker')
 
 
-	# summary writer
+	# ----------------------------------
+	# Load Summary Writer
+	# ----------------------------------
 	common_log_parent_path = f'{args.tensorboard}/batch_level/' + datetime.now().strftime("%Y%m%d-%H%M%S") + args.model_type
 	train_log_dir = common_log_parent_path + '/train'
 	train_writer = tf.summary.create_file_writer(train_log_dir)
@@ -193,7 +274,10 @@ def main(args):
 		val_log_dir = common_log_parent_path + '/val'
 		val_writer = tf.summary.create_file_writer(val_log_dir)
 
-	# metrics name for progressbar
+
+	#--------------------------------------
+	# Create Progress Bar (keras.progbar)
+	#--------------------------------------
 	stateful_metrics = []
 	if args.pretext_task_type != 'context_encoder':
 		metrics_names = ['loss', 'top1_acc', 'top5_acc']
@@ -203,11 +287,21 @@ def main(args):
 	stateful_metrics += metrics_names
 
 	if args.use_validation:
-		val_metrics_names = ['val_loss', 'val_top1_acc', 'val_top5_acc']
+		if args.pretext_task_type != 'context_encoder':
+			val_metrics_names = ['val_loss', 'val_top1_acc', 'val_top5_acc']
+		else:
+			val_metrics_names = ['val_batch_gen_recon_loss']
+
 		stateful_metrics += val_metrics_names
 
-	# Set up Keras progress bar
 	progbar = tf.keras.utils.Progbar(iter_per_epoch, stateful_metrics=stateful_metrics)
+
+
+	#----------------------
+	# Start train and val
+	#----------------------
+	if config.model.random_masking:
+
 
 	for epoch in range(args.num_epochs):
 		print("\nepoch {}/{}".format(epoch+1, args.num_epochs))
@@ -218,7 +312,7 @@ def main(args):
 		#progbar.add(0, values=val_values)
 
 		# train step
-		for step, batch in enumerate(train_dataset):
+		for step, batch in enumerate(train_dataloader):
 
 			# initial updation of val progbar
 
@@ -309,7 +403,7 @@ def main(args):
 
 		# validation code goes here
 		if args.use_validation:
-			for val_step, val_batch in enumerate(val_dataset):
+			for val_step, val_batch in enumerate(val_dataloader):
 
 				# for context_encoder
 				if pretext_task_type == 'context_encoder':
@@ -321,7 +415,7 @@ def main(args):
 	                    masked_region = None
 
 	                else:
-	                    masked_samples, masked_region = get_random_region_mask(samples.numpy(), args.img_size, args.mask_area, global_random_pattern)
+	                    masked_samples, masked_region = get_random_region_mask(samples.numpy(), config.model.img_size, config.model.mask_area, global_random_pattern)
 	                    masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 	                    true_masks = samples
 
@@ -552,8 +646,8 @@ def train_ce(args,
         gen_adv_loss = adv_loss_func(true_labels, dis_fake_output)
         
         # compute generator recontruction loss
-        l2_weights = get_l2_weights(args, gen_fake_output.shape, masked_region)
-        gen_recon_loss = recon_loss_func(gen_fake_output, true_masks, l2_weights)
+        # l2_weights = get_l2_weights(args, gen_fake_output.shape, masked_region)
+        gen_recon_loss = recon_loss_func(true_masks, gen_fake_output)
         
         gen_total_loss = (1 - args.w_rec) * gen_adv_loss + args.w_rec * gen_recon_loss
         
@@ -587,15 +681,15 @@ def test_ce(args, inputs, generator, recon_loss_func, val_gen_recon_loss_tracker
     gen_fake_output = generator(masked_samples)
     
     # compute generator recontruction loss
-    l2_weights = get_l2_weights(args, gen_fake_output.shape, masked_region)
-    gen_recon_loss = recon_loss_func(gen_fake_output, true_masks, l2_weights)
+    #l2_weights = get_l2_weights(args, gen_fake_output.shape, masked_region)
+    gen_recon_loss = recon_loss_func(true_masks, gen_fake_output)
     
     # update generator tracker
     val_gen_recon_loss_tracker.update_state(gen_recon_loss)
         
     return gen_recon_loss
     
-    
+
 
 if __name__ == '__main__':
 	args = parse_args()
