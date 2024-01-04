@@ -3,14 +3,15 @@ import numpy as np
 from glob import glob                                                           
 import cv2, os, shutil, sys 
 from imutils import paths 
+import importlib.util
 import random
+from glob import glob                                                           
+import cv2 
+
 
 cosine_sim_1d = tf.keras.metrics.CosineSimilarity(axis=1)
 cosine_sim_2d = tf.keras.metrics.CosineSimilarity(axis=2)
 
-
-from glob import glob                                                           
-import cv2 
 
 AUTO = tf.data.experimental.AUTOTUNE
 
@@ -815,3 +816,16 @@ def get_criterion(criterion_type, reduction_type=None, from_logits=False):
 
 
     return loss_func
+
+
+def load_module_from_source(module_name, file_path):
+    # Create a spec for the module
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    
+    # Create a module based on the spec
+    module = importlib.util.module_from_spec(spec)
+    
+    # Load the source code into the module
+    spec.loader.exec_module(module)
+    
+    return module

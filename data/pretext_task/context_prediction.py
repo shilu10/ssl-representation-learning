@@ -29,7 +29,7 @@ class ContextPredictionDataLoader:
 
     def preprocess_image(self, image_path, label):
 
-        patch_dim, gap = self.args.patch_dim, self.args.gap
+        patch_dim, gap = self.args.model.get('patch_dim'), self.args.model.get('gap')
 
         raw = tf.io.read_file(image_path)
         image = tf.image.decode_jpeg(raw, channels=3)

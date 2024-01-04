@@ -23,14 +23,14 @@ class RotateNetDataLoader:
         self.args = args
         self.image_files_path = image_files_path
         self.labels = labels
-        self.num_classes = args.num_classes
+        self.num_classes = args.model.get('num_classes')
 
         self.split_type = split_type
         self.batch_size = batch_size
         self.shuffle = shuffle
 
-        self.rotations= args.rotations
-        self.use_all_rotations= args.use_all_rotations
+        self.rotations= args.model.get('rotations')
+        self.use_all_rotations= args.model.get('use_all_rotations')
 
     def parse_file(self, image_path, label=None):
         raw = tf.io.read_file(image_path)

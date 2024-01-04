@@ -21,7 +21,11 @@ class JigSawDataLoader:
                 shuffle=True):
 
         self.args = args 
-        self.permutations = self.__retrive_permutations(args.num_classes, args.permutation_path)
+        self.num_classes = args.model.get('num_classes')
+        self.permutation_path = args.model.get('args.permutation_path')
+
+        self.permutations = self.__retrive_permutations(num_classes=self.num_classes,
+                                                        permutation_path=self.permutation_path)
         self.num_classes = args.num_classes
         self.split_type = split_type
 
@@ -57,7 +61,7 @@ class JigSawDataLoader:
         cropped_image = tf.image.random_crop(image, size=(225, 225, 3))
 
         # grid size or grid dim
-        grid_size = self.args.grid_size
+        grid_size = self.args.model.get('grid_size')
         if isinstance(grid_size, int):
             grid_size = (grid_size, grid_size)
 
