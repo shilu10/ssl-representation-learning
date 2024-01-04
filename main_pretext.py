@@ -83,37 +83,17 @@ def main(args):
 		validation_image_files_path = image_files_path[: num_val_images]
 		train_image_files_path = image_files_path[num_val_images+1: ]
 
+		train_labels = [np.random.randint(0, 10) for _ in range(len(train_image_files_path))]
+		val_labels = [np.random.randint(0, 10) for _ in range(len(validation_image_files_path))]
+
 	else:
 		train_image_files_path = image_files_path
+		train_labels = [np.random.randint(0, 10) for _ in range(len(train_image_files_path))]
 
-	if args.pretext_task_type == 'jigsaw':
-		
-		train_dataset = PretextTaskDataGenerator(args, train_image_files_path, args.batch_size, args.shuffle, args.num_classes, args.permutation_arr_path)
+	#-------------------------
+	# Dataloaders
+	#------------------------
 
-		if args.use_validation:
-			val_dataset = PretextTaskDataGenerator(args, validation_image_files_path, args.batch_size, args.shuffle, args.num_classes, args.permutation_arr_path)
-
-	elif args.pretext_task_type == 'rotation':
-
-		train_dataset = RotateNetDataLoader(image_files_path=train_image_files_path, 
-											rotations=[0, 90, 180, 270], 
-											use_all_rotations=args.use_all_rotations, 
-											split_type='train', 
-											shuffle=args.shuffle
-										).get_dataset()
-
-		if args.use_validation:
-			val_dataset = RotateNetDataLoader(image_files_path=validation_image_files_path, 
-											rotations=[0, 90, 180, 270], 
-											use_all_rotations=args.use_all_rotations, 
-											split_type='val', 
-											shuffle=args.shuffle
-										).get_dataset()
-
-	else:
-		labels = np.arange(len(image_files_path))
-		train_dataset = ImageDataLoader(args, image_files_path, labels, shuffle=True, batch_size=args.batch_size)
-		train_dataset = train_dataset.create_dataset()
 
 	'''
 	# Apply optimizations
@@ -142,15 +122,26 @@ def main(args):
 
 	# optimizer
 	optimizer = tf.keras.optimizers.Adam()
+	# get_optimizer()
 
 	# criterion
 	criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-	
+	# get_criterion()
+
 	# checkpoint 
-	ckpt = tf.train.Checkpoint(step=tf.Variable(1), 
-							  optimizer=optimizer, 
-							  net=network)
-							 # iterator=iter(dataset))
+	if args.pretext_task_type == "context_encoder":
+		# checkpoint 
+		ckpt = tf.train.Checkpoint(step=tf.Variable(1), 
+								  generator=generator, 
+								  discriminator=discriminator, 
+								  g_optim=g_optim, 
+								  d_optim=d_optim)
+	
+	else:
+		ckpt = tf.train.Checkpoint(step=tf.Variable(1), 
+								  optimizer=optimizer, 
+								  net=network)
+								 # iterator=iter(dataset))
 
 	manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=3)
 
@@ -163,18 +154,35 @@ def main(args):
 		print("Initializing network from scratch.")
 
 	# metric trackers
-	loss_tracker = tf.keras.metrics.Mean()
-	top1_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=1, 
-									name='top_k_categorical_accuracy', dtype=None)
-	top5_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, 
-									name='top_k_categorical_accuracy', dtype=None)
+	if args.pretext_task_type == 'context_encoder':
+		gen_total_loss_tracker = tf.keras.metrics.Mean(name='total_gen_loss_tracker')
+		gen_adv_loss_tracker = tf.keras.metrics.Mean(name='gen_adv_loss_tracker')
+		gen_recon_loss_tracker = tf.keras.metrics.Mean(name='gen_recon_loss_tracker')
+		dis_loss_tracker = tf.keras.metrics.Mean(name='dis_loss_tracker')
+
+		# accuracy tracker
+		dis_acc_tracker = tf.keras.metrics.Accuracy(name='discriminator_accuracy')
+
+	else:
+
+		loss_tracker = tf.keras.metrics.Mean()
+		top1_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=1, 
+										name='top_k_categorical_accuracy', dtype=None)
+		top5_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, 
+										name='top_k_categorical_accuracy', dtype=None)
 
 	# val trackers
-	val_loss_tracker = tf.keras.metrics.Mean()
-	val_top1_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=1, 
-									name='top_k_categorical_accuracy', dtype=None)
-	val_top5_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, 
-									name='top_k_categorical_accuracy', dtype=None)
+	if args.use_validation:
+		if args.pretext_task_type != 'context_encoder':
+			val_loss_tracker = tf.keras.metrics.Mean()
+			val_top1_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=1, 
+											name='top_k_categorical_accuracy', dtype=None)
+			val_top5_acc = tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, 
+											name='top_k_categorical_accuracy', dtype=None)
+
+		else:
+			val_gen_recon_loss_tracker = tf.keras.metrics.Mean(name='gen_recon_loss_tracker')
+
 
 	# summary writer
 	common_log_parent_path = f'{args.tensorboard}/batch_level/' + datetime.now().strftime("%Y%m%d-%H%M%S") + args.model_type
@@ -187,7 +195,11 @@ def main(args):
 
 	# metrics name for progressbar
 	stateful_metrics = []
-	metrics_names = ['loss', 'top1_acc', 'top5_acc']
+	if args.pretext_task_type != 'context_encoder':
+		metrics_names = ['loss', 'top1_acc', 'top5_acc']
+	else:
+		metrics_names = ['gen_total_loss', 'gen_adv_loss', 'gen_recon_loss', 'disc_loss', 'disc_acc']
+
 	stateful_metrics += metrics_names
 
 	if args.use_validation:
@@ -200,102 +212,242 @@ def main(args):
 	for epoch in range(args.num_epochs):
 		print("\nepoch {}/{}".format(epoch+1, args.num_epochs))
 
-		values = [('loss', 0.0), ('top1_acc', 0.0), ('top5_acc', 0.0)]
-		val_values = [('val_loss', 0.0), ('val_top1_acc', 0.0), ('val_top5_acc', 0.0)]
-		progbar.add(0, values=values)
-		progbar.add(0, values=val_values)
+		#values = [('loss', 0.0), ('top1_acc', 0.0), ('top5_acc', 0.0)]
+		#val_values = [('val_loss', 0.0), ('val_top1_acc', 0.0), ('val_top5_acc', 0.0)]
+		#progbar.add(0, values=values)
+		#progbar.add(0, values=val_values)
 
 		# train step
 		for step, batch in enumerate(train_dataset):
 
 			# initial updation of val progbar
+
+			# for context encoder
+			if pretext_task_type == 'context_encoder':
+				samples, _ = batch
+
+				if not args.random_masking:
+	                true_masks, masked_samples, _ = get_center_block_mask(samples.numpy(), mask_size, args.overlap)
+	                masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+	                true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
+	                masked_region = None
+
+	            else:
+	                masked_samples, masked_region = get_random_region_mask(samples.numpy(), args.img_size, args.mask_area, global_random_pattern)
+	                masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+	                true_masks = samples
+
+	            inputs = (masked_samples, true_masks, masked_region)
+
+	            results = train_ce(args=args, 
+                       inputs=inputs, 
+                       generator=context_gen, 
+                       discriminator=context_dis, 
+                       g_optim=cg_optim, 
+                       d_optim=cd_optim, 
+                       adv_loss_func=adversarial_loss, 
+                       recon_loss_func=reconstruction_loss,
+                       gen_total_loss_tracker=gen_total_loss_tracker, 
+                       gen_adv_loss_tracker=gen_adv_loss_tracker, 
+                       gen_recon_loss_tracker=gen_recon_loss_tracker, 
+                       dis_loss_tracker=dis_loss_tracker,
+                       dis_acc_tracker=dis_acc_tracker
+                )
+
+                # metrics
+	            batch_gen_total_loss = gen_total_loss_tracker.result()
+	            batch_gen_adv_loss = gen_adv_loss_tracker.result()
+	            batch_gen_recon_loss = gen_recon_loss_tracker.result()
+	            batch_dis_total_loss = dis_loss_tracker.result()
+	            batch_dis_acc = dis_acc_tracker.result()
+	            
+	            values = [('gen_total_loss', batch_gen_total_loss), \
+	                      ('gen_adv_loss', batch_gen_adv_loss), \
+	                      ('gen_recon_loss', batch_gen_recon_loss), \
+	                      ('disc_loss', batch_dis_total_loss), \
+	                      ('batch_dis_acc', batch_dis_acc)]
+
+	            progbar.update(step + 1, values=values)	
+
+	            # summary writer
+	            with train_writer.as_default(step=step):
+	                tf.summary.scalar('batch_gen_total_loss', batch_gen_total_loss)
+	                tf.summary.scalar('batch_gen_adv_loss', batch_gen_adv_loss)
+	                tf.summary.scalar('batch_gen_recon_loss', batch_gen_recon_loss)
+	                tf.summary.scalar('batch_dis_total_loss', batch_dis_total_loss)
+	                tf.summary.scalar('batch_dis_acc', batch_dis_acc)
+
+	                train_writer.flush()
+
+	        else:
 			
-			result = train(
-					network = network,
-					batch = batch,
-					optimizer = optimizer,
-					criterion = criterion,
-					top1_acc = top1_acc,
-					top5_acc = top5_acc,
-					loss_tracker = loss_tracker,
-				)
+				result = train(
+						network = network,
+						batch = batch,
+						optimizer = optimizer,
+						criterion = criterion,
+						top1_acc = top1_acc,
+						top5_acc = top5_acc,
+						loss_tracker = loss_tracker,
+					)
 
-			# metrics
-			batch_loss = loss_tracker.result()
-			batch_top1_acc = top1_acc.result()
-			batch_top5_acc = top5_acc.result()
+				# metrics
+				batch_loss = loss_tracker.result()
+				batch_top1_acc = top1_acc.result()
+				batch_top5_acc = top5_acc.result()
 
-			# Update Keras progress bar
-			values = [('loss', batch_loss), ('top1_acc', batch_top1_acc), ('top5_acc', batch_top5_acc)]
-			progbar.update(step + 1, values=values)	
+				# Update Keras progress bar
+				values = [('loss', batch_loss), ('top1_acc', batch_top1_acc), ('top5_acc', batch_top5_acc)]
+				progbar.update(step + 1, values=values)	
 
-			# train batch summaries
-			with train_writer.as_default(step=step):
-				tf.summary.scalar('batch_loss', batch_loss)
-				tf.summary.scalar('batch_top1_acc', batch_top1_acc)
-				tf.summary.scalar('batch_top5_acc', batch_top5_acc)
+				# train batch summaries
+				with train_writer.as_default(step=step):
+					tf.summary.scalar('batch_loss', batch_loss)
+					tf.summary.scalar('batch_top1_acc', batch_top1_acc)
+					tf.summary.scalar('batch_top5_acc', batch_top5_acc)
+
 
 		# validation code goes here
 		if args.use_validation:
 			for val_step, val_batch in enumerate(val_dataset):
-				val_result = test(
-						network = network,
-						batch = val_batch,
-						criterion = criterion,
-						top1_acc = val_top1_acc,
-						top5_acc = val_top5_acc,
-						loss_tracker = val_loss_tracker,
-					)
-					
-				# metrics
-				val_batch_loss = val_loss_tracker.result()
-				val_batch_top1_acc = val_top1_acc.result()
-				val_batch_top5_acc = val_top5_acc.result()
-					
-				# val summary
-				with val_writer.as_default(step=val_step):
-					tf.summary.scalar('val_batch_loss', val_batch_loss)
-					tf.summary.scalar('val_batch_top1_acc', val_batch_top1_acc)
-					tf.summary.scalar('val_batch_top5_acc', val_batch_top5_acc)
 
-				# updating the keras prohbar
-				val_values = [('val_loss', val_batch_loss), ('val_top1_acc', val_batch_top1_acc), ('val_top5_acc', val_batch_top5_acc)]
-				progbar.add(0, values=val_values)
+				# for context_encoder
+				if pretext_task_type == 'context_encoder':
+					samples, _ = batch 
+					if not args.random_masking:
+	                    true_masks, masked_samples, _ = get_center_block_mask(samples.numpy(), mask_size, args.overlap)
+	                    masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+	                    true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
+	                    masked_region = None
 
+	                else:
+	                    masked_samples, masked_region = get_random_region_mask(samples.numpy(), args.img_size, args.mask_area, global_random_pattern)
+	                    masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+	                    true_masks = samples
+
+	                inputs = (masked_samples, true_masks, masked_region)
+
+	                results = test_ce(args=args, 
+	                                inputs=inputs, 
+	                                generator=context_gen, 
+	                                recon_loss_func=reconstruction_loss,
+	                                val_gen_recon_loss_tracker=val_gen_recon_loss_tracker)
+
+	                # batch metrics
+	                val_batch_gen_recon_loss = val_gen_recon_loss_tracker.result()
+
+	                # updating the keras prohbar
+					val_values = [('val_batch_gen_recon_loss', val_batch_gen_recon_loss)]
+					progbar.add(0, values=val_values)
+
+	                # summary writer
+	                with val_writer.as_default(step=val_step):
+	                    tf.summary.scalar('val_batch_gen_recon_loss', val_batch_gen_recon_loss)
+
+	                    val_writer.flush()
+
+				else:
+					val_result = test(
+								network = network,
+								batch = val_batch,
+								criterion = criterion,
+								top1_acc = val_top1_acc,
+								top5_acc = val_top5_acc,
+								loss_tracker = val_loss_tracker,
+							)
+					# metrics
+					val_batch_loss = val_loss_tracker.result()
+					val_batch_top1_acc = val_top1_acc.result()
+					val_batch_top5_acc = val_top5_acc.result()
+
+					# updating the keras prohbar
+					val_values = [('val_loss', val_batch_loss), ('val_top1_acc', val_batch_top1_acc), ('val_top5_acc', val_batch_top5_acc)]
+					progbar.add(0, values=val_values)
+
+					# val summary
+					with val_writer.as_default(step=val_step):
+						tf.summary.scalar('val_batch_loss', val_batch_loss)
+						tf.summary.scalar('val_batch_top1_acc', val_batch_top1_acc)
+						tf.summary.scalar('val_batch_top5_acc', val_batch_top5_acc)
+
+					
 				if val_step == 100:
 					break
+						
 
-		# for training
-		epoch_loss = loss_tracker.result()
-		epoch_top1_acc = top1_acc.result()
-		epoch_top5_acc = top5_acc.result()
+		if args.pretext_task_type == 'context_encoder':
+			# epoch metrics
+	        epoch_gen_total_loss = gen_total_loss_tracker.result()
+	        epoch_gen_adv_loss = gen_adv_loss_tracker.result()
+	        epoch_gen_recon_loss = gen_recon_loss_tracker.result()
+	        epoch_dis_total_loss = dis_loss_tracker.result()
+	        epoch_dis_acc = dis_acc_tracker.result()
+
+	    else:
+			# for training
+			epoch_loss = loss_tracker.result()
+			epoch_top1_acc = top1_acc.result()
+			epoch_top5_acc = top5_acc.result()
 
 		# epoch-level summary writer
 		with train_writer.as_default(step=epoch):
-			tf.summary.scalar('epoch_loss', epoch_loss)
-			tf.summary.scalar('epoch_top1_acc', epoch_top1_acc)
-			tf.summary.scalar('epoch_top5_acc', epoch_top5_acc)
+			if args.pretext_task_type != 'context_encoder':
+				tf.summary.scalar('epoch_loss', epoch_loss)
+				tf.summary.scalar('epoch_top1_acc', epoch_top1_acc)
+				tf.summary.scalar('epoch_top5_acc', epoch_top5_acc)
+
+			else:
+				tf.summary.scalar('epoch_gen_total_loss', epoch_gen_total_loss)
+	            tf.summary.scalar('epoch_gen_adv_loss', epoch_gen_adv_loss)
+	            tf.summary.scalar('epoch_gen_recon_loss', epoch_gen_recon_loss)
+	            tf.summary.scalar('epoch_dis_total_loss', epoch_dis_total_loss)
+	            tf.summary.scalar('epoch_dis_acc', epoch_dis_acc)
+
+			train_writer.flush()
 
 		# for val
 		if args.use_validation:
-			val_epoch_loss = loss_tracker.result()
-			val_epoch_top1_acc = top1_acc.result()
-			val_epoch_top5_acc = top5_acc.result()
+			if pretext_task_type != "context_encoder":
+				val_epoch_loss = loss_tracker.result()
+				val_epoch_top1_acc = top1_acc.result()
+				val_epoch_top5_acc = top5_acc.result()
+
+			else:
+				val_epoch_gen_recon_loss = val_gen_recon_loss_tracker.result()
 
 			# epoch-level summary writer
 			with val_writer.as_default(step=epoch):
-				tf.summary.scalar('val_epoch_loss', val_epoch_loss)
-				tf.summary.scalar('val_epoch_top1_acc', val_epoch_top1_acc)
-				tf.summary.scalar('val_epoch_top5_acc', val_epoch_top5_acc)
+				if pretext_task_type != "context_encoder":
+					tf.summary.scalar('val_epoch_loss', val_epoch_loss)
+					tf.summary.scalar('val_epoch_top1_acc', val_epoch_top1_acc)
+					tf.summary.scalar('val_epoch_top5_acc', val_epoch_top5_acc)
 
-		# reset the netrics
-		loss_tracker.reset_state()
-		top5_acc.reset_state()
-		top1_acc.reset_state()
+				else:
+					tf.summary.scalar('val_epoch_gen_recon_loss', val_epoch_gen_recon_loss)
 
-		val_loss_tracker.reset_state()
-		val_top1_acc.reset_state()
-		val_top5_acc.reset_state()
+				val_writer.flush()
+
+		if pretext_task_type != "context_encoder":
+			# reset the netrics
+			loss_tracker.reset_state()
+			top5_acc.reset_state()
+			top1_acc.reset_state()
+
+		else:
+			gen_total_loss_tracker.reset_state()
+	        gen_adv_loss_tracker.reset_state()
+	        gen_recon_loss_tracker.reset_state()
+	        dis_loss_tracker.reset_state()
+
+	    if args.use_validation:
+	    	if pretext_task_type != "context_encoder":
+				val_loss_tracker.reset_state()
+				val_top1_acc.reset_state()
+				val_top5_acc.reset_state()
+
+			else:
+				val_gen_recon_loss_tracker.reset_state()
+
 
 		# for checkpoint update
 		ckpt.step.assign_add(1)
@@ -304,10 +456,8 @@ def main(args):
 			print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
 			print("loss {:1.2f}".format(epoch_loss.numpy()))
 
-		# shuffle the dataset
-		train_dataset.on_epoch_end()
-		if args.use_validation:
-			val_dataset.on_epoch_end()
+
+	tf.summary.FileWriter.close()
 
 
 def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker):
@@ -352,7 +502,104 @@ def test(network, batch, criterion, top1_acc, top5_acc, loss_tracker):
 	return loss 
 
 
+def train_ce(args,
+               inputs, 
+               generator, 
+               discriminator, 
+               g_optim, 
+               d_optim, 
+               adv_loss_func, 
+               recon_loss_func, 
+               gen_total_loss_tracker, 
+               gen_adv_loss_tracker, 
+               gen_recon_loss_tracker, 
+               dis_loss_tracker, dis_acc_tracker):
+    
+    masked_samples, true_masks, masked_region = inputs
+    
+    # training generators
+    true_labels = tf.ones(args.batch_size)
+    fake_labels = tf.ones(args.batch_size)
+    
+    # discrimnator gradient cal
+    with tf.GradientTape() as tape:
+        # train discrinator
+        dis_true_output = discriminator(true_masks)
+        
+        # generate fake images
+        gen_fake_output = generator(masked_samples, training=True)
+        
+        dis_fake_output = discriminator(gen_fake_output, training=True)
+        
+        true_output_loss = adv_loss_func(true_labels, dis_true_output)
+        fake_output_loss = adv_loss_func(fake_labels, dis_fake_output)
+        
+        # total discriminator loss
+        dis_loss = (true_output_loss + fake_output_loss) * 0.5
+    
+    trainable_vars = discriminator.trainable_weights
+    gradients = tape.gradient(dis_loss, trainable_vars)
+    
+    d_optim.apply_gradients(zip(gradients, trainable_vars))
+    
+    # generator gradient cal
+    with tf.GradientTape() as tape:
+        gen_fake_output = generator(masked_samples, training=True)
+        
+        dis_fake_output = discriminator(gen_fake_output, training=True)
+        
+        # Compute adversarial loss for generator
+        gen_adv_loss = adv_loss_func(true_labels, dis_fake_output)
+        
+        # compute generator recontruction loss
+        l2_weights = get_l2_weights(args, gen_fake_output.shape, masked_region)
+        gen_recon_loss = recon_loss_func(gen_fake_output, true_masks, l2_weights)
+        
+        gen_total_loss = (1 - args.w_rec) * gen_adv_loss + args.w_rec * gen_recon_loss
+        
+    trainable_vars = generator.trainable_weights
+    gradients = tape.gradient(gen_total_loss, trainable_vars)
+    
+    g_optim.apply_gradients(zip(gradients, trainable_vars))
+    
+    # generator loss tracker
+    gen_total_loss_tracker.update_state(gen_total_loss)
+    gen_adv_loss_tracker.update_state(gen_adv_loss)
+    gen_recon_loss_tracker.update_state(gen_recon_loss)
+    
+    # discrimnator loss tracker
+    dis_loss_tracker.update_state(dis_loss)
+    
+    dis_acc_tracker.update_state(true_labels, dis_true_output)
+    dis_acc_tracker.update_state(fake_labels, dis_fake_output)
+    
+    return {
+        'gen_loss': gen_total_loss,
+        'dis_loss': dis_loss
+    }
+
+
+def test_ce(args, inputs, generator, recon_loss_func, val_gen_recon_loss_tracker):
+    
+    # unpack inputs
+    masked_samples, true_masks, masked_region = inputs
+    
+    gen_fake_output = generator(masked_samples)
+    
+    # compute generator recontruction loss
+    l2_weights = get_l2_weights(args, gen_fake_output.shape, masked_region)
+    gen_recon_loss = recon_loss_func(gen_fake_output, true_masks, l2_weights)
+    
+    # update generator tracker
+    val_gen_recon_loss_tracker.update_state(gen_recon_loss)
+        
+    return gen_recon_loss
+    
+    
+
 if __name__ == '__main__':
 	args = parse_args()
 
 	main(args)
+
+
