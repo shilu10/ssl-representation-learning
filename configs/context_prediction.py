@@ -1,10 +1,12 @@
-batch_size   = 128
-
 config = {}
 
-config['grid_size'] = (3, 3)
-config['num_classes'] = 10 
-config['permutation_path'] = 'permutation_max_10.npy'
+model = {}
+model['patch_size'] = 15
+model['gap'] = 2
+model['img_size'] = 96 
+model['num_classes'] = 8
+
+config['model'] = model
 
 networks = {}
 networks['type'] = 'AlexNetContextPrediction'
@@ -15,9 +17,15 @@ dataloader['name'] = 'ContextPredictionDataLoader'
 config['dataloader'] = dataloader
 
 # optimizer
-model_training = {}
-model_training['optimizer'] = "Adam"
-model_training['loss'] = 'CrossEntropyLoss'
-model_training['metrics'] = ['prec1', 'prec5']
-config['model_training'] = model_training
+optimizer = {}
+optimizer['name'] = "Adam"
+optimizer['lr'] = 0.001 
+optimizer['use_lr_scheduler'] = False
+config['optimizer'] = optimizer
+
+# loss function
+criterion = {}
+criterion['name'] = 'sparse_categorical_crossentropy'
+config['criterion'] = criterion
+
 
