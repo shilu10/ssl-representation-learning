@@ -750,3 +750,40 @@ def get_random_region_mask(
 
     return masked_samples, mask
 
+
+def get_l2_weights(args, prediction_size, masked_region=None):
+    """
+    Get tensor of weights for the l2-reconstruction loss. Loss weights are chosen depending on whether they belong
+    to the overlap region or not. For random masking all unmasked regions are taken as overlap region, i.e.
+    straightforward reconstruction of the region in the original input image.
+
+    Parameters
+    ----------
+    args: argparse.Namespace
+        Batch of samples, e.g. images, which are passed through the network and for which specified intermediate
+        results are extracted
+    prediction_size: tf.TensorShape
+        Size of the predictions / generated image part based on which the generator l2-loss is calculated
+    masked_region: tf.Tensor
+        Binary tensor encoding the masked region of the input image (in case of random masking).
+    """
+    if args.overlap != 0:
+        loss_weights = tf.constant(args.w_rec * args.overlap_weight_multiplier, shape=prediction_size)
+
+        if not args.random_masking:
+            loss_weights[:, args.overlap:-args.overlap, args.overlap:-args.overlap] = args.w_rec
+        else:
+            # Assuming masked_region is a boolean mask
+            loss_weights = tf.where(masked_region, args.w_rec, loss_weights)
+    else:
+        if not args.random_masking:
+            loss_weights = tf.ones(prediction_size)
+        else:
+            loss_weights = tf.zeros(prediction_size)
+            # Assuming masked_region is a boolean mask
+            loss_weights = tf.where(masked_region, args.w_rec, loss_weights)
+    return loss_weights
+
+
+def weighted_mse_loss(outputs, targets, weights):
+    return tf.pow(tf.reduce-mean(weights * (outputs - targets)), 2)
