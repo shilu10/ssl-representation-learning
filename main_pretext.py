@@ -6,103 +6,17 @@ from imutils import paths
 from tqdm import tqdm
 import numpy as np 
 import argparse 
-from augment import JigSaw
-from typing import Union
-from utils import RotateNetDataLoader, PretextTaskDataGenerator, ContextPredictionDataLoader, ImageDataLoader
-from backbone import AlexNet as alex, AlexnetV1
 from datetime import datetime 
-import itertools
-import matplotlib.pyplot as plt 
-import architectures.pretext_task as networks
-import data.pretext_task as dataloaders
-from utils import get_optimizer, get_criterion, load_module_from_source
-from utils import get_l2_weights, get_center_block_mask, get_random_region_mask, generate_random_pattern, get_random_block_mask
+import itertools 
+
+import src.networks.pretext_task as networks
+import src.data.pretext_task as dataloaders
+from src.utils.common import get_optimizer, get_criterion, load_module_from_source
+from src.utils.pretext_task import get_center_block_mask, get_random_region_mask, generate_random_pattern, get_random_block_mask
+from arguments import main_pretext_parse_args
+
 
 AUTO = tf.data.experimental.AUTOTUNE
-
-
-def parse_args():
-
-	parser = argparse.ArgumentParser()
-	# model, save, load args
-	parser.add_argument('--checkpoint', 
-						type=str, 
-						default="./checkpoint/", 
-						help='checkpoint directory path')
-
-	parser.add_argument('--tensorboard', 
-						type=str, 
-						default='./logs/', 
-						help="tensorboard directory path")
-
-	parser.add_argument('--chkpt_step', 
-						type=int, 
-						default=5, 
-						help='how frequently to save checkpoint')
-
-	parser.add_argument('--gpu',
-						default=0, 
-						type=int, 
-						help='gpu id')
-
-	#parser.add_argument('--num_classes', type=int, default=1000)
-	# model type and dataloader args
-	parser.add_argument('--pretext_task_type', 
-						type=str, 
-						default='jigsaw', 
-						choices=['jigsaw', 'rotation', 'context_prediction', 'context_encoder'],
-						help='type of pretext task')
-
-	parser.add_argument('--unlabeled_datapath', 
-						type=str, 
-						default='./stl10/unlabeled_images/',
-						help='directory path to unlabeled data')
-	
-	# model training args
-	parser.add_argument('--num_epochs',
-					   type=int, 
-					   default=100, 
-					   help='number of epoch to train a model')
-
-	parser.add_argument('--batch_size', 
-						type=int, 
-						default=32, 
-						help="number of batch")
-	#parser.add_argument('--lr', type=float, default=0.001)
-
-	parser.add_argument('--use_validation', 
-						default=False,
-						type=bool, 
-						help='to use validation or not, if True it splits the unlabeled data into train and val')
-
-	parser.add_argument('--val_split_size', 
-						type=float, default=0.2, 
-						help="amount of data need for validation")
-
-	parser.add_argument('--shuffle',
-					   type=bool, 
-					   default=True, 
-					   help='whether or not to shuffle the dataset')
-
-	#parser.add_argument('--permutation_arr_path', type=str, default='permutation_max_1000.npy')
-
-	#parser.add_argument('--shuffle', type=bool, default=True)
-	#parser.add_argument('--grid_size', type=Union[tuple, int], default=(3, 3))
-
-	
-
-	#parser.add_argument('--use_all_rotations', type=bool, default=False)
-
-	#parser.add_argument('--patch_dim', type=int, default=15)
-	#parser.add_argument('--gap', type=int, default=2)
-
-	# config
-	parser.add_argument('--config_path', 
-						type=str, 
-						default='config/', 
-						help='config path for specific pretext task')
-
-	return parser.parse_args()
 
 
 def main(args):
@@ -332,6 +246,7 @@ def main(args):
 		global_random_pattern = generate_random_pattern(mask_area=config.model.get('mask_area'), 
 														resolution=config.model.get('resolution'), 
 														max_pattern_size=config.model.get('max_pattern_size'))
+	
 
 
 	for epoch in range(args.num_epochs):
@@ -371,20 +286,20 @@ def main(args):
 
 	            inputs = (masked_samples, true_masks, masked_region)
 
-	            results = train_ce(args=args, 
-                       inputs=inputs, 
-                       generator=context_gen, 
-                       discriminator=context_dis, 
-                       g_optim=cg_optim, 
-                       d_optim=cd_optim, 
-                       adv_loss_func=adversarial_loss, 
-                       recon_loss_func=reconstruction_loss,
-                       gen_total_loss_tracker=gen_total_loss_tracker, 
-                       gen_adv_loss_tracker=gen_adv_loss_tracker, 
-                       gen_recon_loss_tracker=gen_recon_loss_tracker, 
-                       dis_loss_tracker=dis_loss_tracker,
-                       dis_acc_tracker=dis_acc_tracker
-                )
+	            results = train_context_encoder(args=args, 
+	                       inputs=inputs, 
+	                       generator=context_gen, 
+	                       discriminator=context_dis, 
+	                       g_optim=cg_optim, 
+	                       d_optim=cd_optim, 
+	                       adv_loss_func=adversarial_loss, 
+	                       recon_loss_func=reconstruction_loss,
+	                       gen_total_loss_tracker=gen_total_loss_tracker, 
+	                       gen_adv_loss_tracker=gen_adv_loss_tracker, 
+	                       gen_recon_loss_tracker=gen_recon_loss_tracker, 
+	                       dis_loss_tracker=dis_loss_tracker,
+	                       dis_acc_tracker=dis_acc_tracker
+	                )
 
                 # metrics
 	            batch_gen_total_loss = gen_total_loss_tracker.result()
@@ -459,11 +374,12 @@ def main(args):
 
 	                inputs = (masked_samples, true_masks, masked_region)
 
-	                results = test_ce(args=args, 
-	                                inputs=inputs, 
-	                                generator=context_gen, 
-	                                recon_loss_func=reconstruction_loss,
-	                                val_gen_recon_loss_tracker=val_gen_recon_loss_tracker)
+	                results = test_context_encoder(args=args, 
+			                                inputs=inputs, 
+			                                generator=context_gen, 
+			                                recon_loss_func=reconstruction_loss,
+			                                val_gen_recon_loss_tracker=val_gen_recon_loss_tracker
+			                            )
 
 	                # batch metrics
 	                val_batch_gen_recon_loss = val_gen_recon_loss_tracker.result()
@@ -634,18 +550,18 @@ def test(network, batch, criterion, top1_acc, top5_acc, loss_tracker):
 	return loss 
 
 
-def train_ce(args,
-               inputs, 
-               generator, 
-               discriminator, 
-               g_optim, 
-               d_optim, 
-               adv_loss_func, 
-               recon_loss_func, 
-               gen_total_loss_tracker, 
-               gen_adv_loss_tracker, 
-               gen_recon_loss_tracker, 
-               dis_loss_tracker, dis_acc_tracker):
+def train_context_encoder(args,
+		               inputs, 
+		               generator, 
+		               discriminator, 
+		               g_optim, 
+		               d_optim, 
+		               adv_loss_func, 
+		               recon_loss_func, 
+		               gen_total_loss_tracker, 
+		               gen_adv_loss_tracker, 
+		               gen_recon_loss_tracker, 
+		               dis_loss_tracker, dis_acc_tracker):
     
     masked_samples, true_masks, masked_region = inputs
     
@@ -711,7 +627,7 @@ def train_ce(args,
     }
 
 
-def test_ce(args, inputs, generator, recon_loss_func, val_gen_recon_loss_tracker):
+def test_context_encoder(args, inputs, generator, recon_loss_func, val_gen_recon_loss_tracker):
     
     # unpack inputs
     masked_samples, true_masks, masked_region = inputs
@@ -730,7 +646,7 @@ def test_ce(args, inputs, generator, recon_loss_func, val_gen_recon_loss_tracker
 
 
 if __name__ == '__main__':
-	args = parse_args()
+	args = main_pretext_parse_args()
 
 	main(args)
 
