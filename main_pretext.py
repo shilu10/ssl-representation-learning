@@ -23,9 +23,9 @@ def main(args):
 	global_random_pattern = None
 	
 	# assertion errors
-	if args.pretext_task_type == 'jigsaw':
-		permutation_arr_path = args.permutation_arr_path
-		assert os.path.exists(args.permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
+	#if args.pretext_task_type == 'jigsaw':
+	#	permutation_arr_path = args.permutation_arr_path
+	#	assert os.path.exists(args.permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
 	#	permutation_arr_path_n_classes = permutation_arr_path.split('.')[0].split('_')[-1]
 	#	assert permutation_arr_path_n_classes == args.num_classes, "permutation_arr_path mismatch with num_classes"
 	
@@ -70,7 +70,7 @@ def main(args):
 	#------------------------
 	# Dataloaders
 	#------------------------
-	train_dataloader = getattr(dataloaders, config.dataloader.get('name'))
+	train_dataloader = getattr(dataloaders, config.dataloader.get('type'))
 	train_dataloader = train_dataloader(args=config, 
 										image_files_path=train_image_files_path, 
 										labels=train_labels, 
@@ -79,7 +79,7 @@ def main(args):
 
 	# val dataloader
 	if args.use_validation:
-		val_dataloader = getattr(dataloaders, config.dataloader.get('name'))
+		val_dataloader = getattr(dataloaders, config.dataloader.get('type'))
 		val_dataloader = val_dataloader(args=config, 
 										image_files_path=train_image_files_path, 
 										labels=train_labels, 
@@ -97,7 +97,7 @@ def main(args):
 	if args.pretext_task_type == 'context_encoder':
 		img_size = config.model.get('img_size')
 		mask_area = config.model.get('mask_area')
-		mask_size = int(np.sqrt() * img_size
+		mask_size = int(np.sqrt() * img_size)
 
 		if config.model.random_masking:
 			out_size = img_size
@@ -114,7 +114,7 @@ def main(args):
 		context_discriminator = context_discriminator(input_size=out_size, in_channels=3)
 
 	else:
-		network = getattr(networks, config.networks.get('name'))
+		network = getattr(networks, config.networks.get('type'))
 		network = network(config=config, 
 						 n_classes=config.model.get('num_classes'),
 						 name=args.pretext_task_type)
@@ -267,26 +267,26 @@ def main(args):
 				samples, _ = batch
 
 				if not args.random_masking:
-	                true_masks, masked_samples, _ = get_center_block_mask(samples=samples.numpy(), 
+					true_masks, masked_samples, _ = get_center_block_mask(samples=samples.numpy(), 
 	                													mask_size=mask_size,
 	                													overlap=args.model.get('overlap'))
-	               
-	                masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
-	                true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
-	                masked_region = None
 
-	            else:
-	                masked_samples, masked_region = get_random_region_mask(samples=samples.numpy(), 
+					masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+					true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
+					masked_region = None
+
+				else:
+					masked_samples, masked_region = get_random_region_mask(samples=samples.numpy(), 
 	                													img_size=args.model.get('img_size'),
 	                													mask_area=args.model.get('mask_area'),
 	                													global_random_pattern=global_random_pattern)
 
-	                masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
-	                true_masks = samples
+					masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+					true_masks = samples
 
-	            inputs = (masked_samples, true_masks, masked_region)
+				inputs = (masked_samples, true_masks, masked_region)
 
-	            results = train_context_encoder(args=args, 
+				results = train_context_encoder(args=args, 
 	                       inputs=inputs, 
 	                       generator=context_gen, 
 	                       discriminator=context_dis, 
@@ -301,33 +301,32 @@ def main(args):
 	                       dis_acc_tracker=dis_acc_tracker
 	                )
 
-                # metrics
-	            batch_gen_total_loss = gen_total_loss_tracker.result()
-	            batch_gen_adv_loss = gen_adv_loss_tracker.result()
-	            batch_gen_recon_loss = gen_recon_loss_tracker.result()
-	            batch_dis_total_loss = dis_loss_tracker.result()
-	            batch_dis_acc = dis_acc_tracker.result()
-	            
-	            values = [('gen_total_loss', batch_gen_total_loss), \
+				# metrics
+				batch_gen_total_loss = gen_total_loss_tracker.result()
+				batch_gen_adv_loss = gen_adv_loss_tracker.result()
+				batch_gen_recon_loss = gen_recon_loss_tracker.result()
+				batch_dis_total_loss = dis_loss_tracker.result()
+				batch_dis_acc = dis_acc_tracker.result()
+
+				values = [('gen_total_loss', batch_gen_total_loss), \
 	                      ('gen_adv_loss', batch_gen_adv_loss), \
 	                      ('gen_recon_loss', batch_gen_recon_loss), \
 	                      ('disc_loss', batch_dis_total_loss), \
 	                      ('batch_dis_acc', batch_dis_acc)]
 
-	            progbar.update(step + 1, values=values)	
+				progbar.update(step + 1, values=values)	
 
-	            # summary writer
-	            with train_writer.as_default(step=step):
-	                tf.summary.scalar('batch_gen_total_loss', batch_gen_total_loss)
-	                tf.summary.scalar('batch_gen_adv_loss', batch_gen_adv_loss)
-	                tf.summary.scalar('batch_gen_recon_loss', batch_gen_recon_loss)
-	                tf.summary.scalar('batch_dis_total_loss', batch_dis_total_loss)
-	                tf.summary.scalar('batch_dis_acc', batch_dis_acc)
+				# summary writer
+				with train_writer.as_default(step=step):
+					tf.summary.scalar('batch_gen_total_loss', batch_gen_total_loss)
+					tf.summary.scalar('batch_gen_adv_loss', batch_gen_adv_loss)
+					tf.summary.scalar('batch_gen_recon_loss', batch_gen_recon_loss)
+					tf.summary.scalar('batch_dis_total_loss', batch_dis_total_loss)
+					tf.summary.scalar('batch_dis_acc', batch_dis_acc)
+					train_writer.flush()
 
-	                train_writer.flush()
+			else:
 
-	        else:
-			
 				result = train(
 						network = network,
 						batch = batch,
@@ -362,37 +361,38 @@ def main(args):
 				if pretext_task_type == 'context_encoder':
 					samples, _ = batch 
 					if not args.random_masking:
-	                    true_masks, masked_samples, _ = get_center_block_mask(samples.numpy(), mask_size, args.overlap)
-	                    masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
-	                    true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
-	                    masked_region = None
+						true_masks, masked_samples, _ = get_center_block_mask(samples.numpy(), mask_size, args.overlap)
+						masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+						true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
+						masked_region = None
 
-	                else:
-	                    masked_samples, masked_region = get_random_region_mask(samples.numpy(), config.model.img_size, config.model.mask_area, global_random_pattern)
-	                    masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
-	                    true_masks = samples
+					else:
+						masked_samples, masked_region = get_random_region_mask(samples.numpy(), config.model.img_size, config.model.mask_area, global_random_pattern)
+						masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
+						true_masks = samples
 
-	                inputs = (masked_samples, true_masks, masked_region)
 
-	                results = test_context_encoder(args=args, 
+					inputs = (masked_samples, true_masks, masked_region)
+					results = test_context_encoder(args=args, 
 			                                inputs=inputs, 
 			                                generator=context_gen, 
 			                                recon_loss_func=reconstruction_loss,
 			                                val_gen_recon_loss_tracker=val_gen_recon_loss_tracker
 			                            )
 
-	                # batch metrics
-	                val_batch_gen_recon_loss = val_gen_recon_loss_tracker.result()
+					# batch metrics
+					val_batch_gen_recon_loss = val_gen_recon_loss_tracker.result()
 
-	                # updating the keras prohbar
+
+					# updating the keras prohbar
 					val_values = [('val_batch_gen_recon_loss', val_batch_gen_recon_loss)]
 					progbar.add(0, values=val_values)
 
-	                # summary writer
-	                with val_writer.as_default(step=val_step):
-	                    tf.summary.scalar('val_batch_gen_recon_loss', val_batch_gen_recon_loss)
 
-	                    val_writer.flush()
+					# summary writer
+					with val_writer.as_default(step=val_step):
+						tf.summary.scalar('val_batch_gen_recon_loss', val_batch_gen_recon_loss)
+						val_writer.flush()
 
 				else:
 					val_result = test(
@@ -425,17 +425,18 @@ def main(args):
 
 		if args.pretext_task_type == 'context_encoder':
 			# epoch metrics
-	        epoch_gen_total_loss = gen_total_loss_tracker.result()
-	        epoch_gen_adv_loss = gen_adv_loss_tracker.result()
-	        epoch_gen_recon_loss = gen_recon_loss_tracker.result()
-	        epoch_dis_total_loss = dis_loss_tracker.result()
-	        epoch_dis_acc = dis_acc_tracker.result()
+			epoch_gen_total_loss = gen_total_loss_tracker.result()
+			epoch_gen_adv_loss = gen_adv_loss_tracker.result()
+			epoch_gen_recon_loss = gen_recon_loss_tracker.result()
+			epoch_dis_total_loss = dis_loss_tracker.result()
+			epoch_dis_acc = dis_acc_tracker.result()
 
-	    else:
+		else:
 			# for training
 			epoch_loss = loss_tracker.result()
 			epoch_top1_acc = top1_acc.result()
 			epoch_top5_acc = top5_acc.result()
+			
 
 		# epoch-level summary writer
 		with train_writer.as_default(step=epoch):
@@ -446,12 +447,13 @@ def main(args):
 
 			else:
 				tf.summary.scalar('epoch_gen_total_loss', epoch_gen_total_loss)
-	            tf.summary.scalar('epoch_gen_adv_loss', epoch_gen_adv_loss)
-	            tf.summary.scalar('epoch_gen_recon_loss', epoch_gen_recon_loss)
-	            tf.summary.scalar('epoch_dis_total_loss', epoch_dis_total_loss)
-	            tf.summary.scalar('epoch_dis_acc', epoch_dis_acc)
+				tf.summary.scalar('epoch_gen_adv_loss', epoch_gen_adv_loss)
+				tf.summary.scalar('epoch_gen_recon_loss', epoch_gen_recon_loss)
+				tf.summary.scalar('epoch_dis_total_loss', epoch_dis_total_loss)
+				tf.summary.scalar('epoch_dis_acc', epoch_dis_acc)
 
 			train_writer.flush()
+	            
 
 		# for val
 		if args.use_validation:
@@ -483,12 +485,12 @@ def main(args):
 
 		else:
 			gen_total_loss_tracker.reset_state()
-	        gen_adv_loss_tracker.reset_state()
-	        gen_recon_loss_tracker.reset_state()
-	        dis_loss_tracker.reset_state()
+			gen_adv_loss_tracker.reset_state()
+			gen_recon_loss_tracker.reset_state()
+			dis_loss_tracker.reset_state()
 
-	    if args.use_validation:
-	    	if pretext_task_type != "context_encoder":
+		if args.use_validation:
+			if pretext_task_type != "context_encoder":
 				val_loss_tracker.reset_state()
 				val_top1_acc.reset_state()
 				val_top5_acc.reset_state()
@@ -507,7 +509,7 @@ def main(args):
 
 	tf.summary.FileWriter.close()
 
-
+		
 def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker):
 	inputs, labels = batch 
 	

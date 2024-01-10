@@ -11,7 +11,7 @@ config['networks'] = networks
 
 # dataloader
 dataloader = {}
-dataloader['name'] = 'ContextPredictionDataLoader'
+dataloader['type'] = 'ContextPredictionDataLoader'
 config['dataloader'] = dataloader
 
 # optimizer

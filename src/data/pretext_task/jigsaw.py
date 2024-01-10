@@ -22,13 +22,13 @@ class JigSawDataLoader:
 
         self.args = args 
         self.num_classes = args.model.get('num_classes')
-        self.permutation_path = args.model.get('args.permutation_path')
+        self.permutation_path = args.model.get('permutation_path')
+        self.num_classes = args.model.get('num_classes')
 
         self.permutations = self.__retrive_permutations(num_classes=self.num_classes,
                                                         permutation_path=self.permutation_path)
-        self.num_classes = args.num_classes
+        
         self.split_type = split_type
-
         self.image_files_path = image_files_path
         self.labels = labels 
         self.batch_size = batch_size

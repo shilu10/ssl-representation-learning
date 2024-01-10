@@ -12,19 +12,19 @@ networks['type'] = 'AlexNetRotationPrediction'
 config['networks'] = networks
 
 dataloader = {}
-dataloader['name'] = 'RotationPredictionDataLoader'
+dataloader['type'] = 'RotationPredictionDataLoader'
 config['dataloader'] = dataloader
 
 # optimizer
 optimizer = {}
-optimizer['name'] = "Adam"
+optimizer['type'] = "Adam"
 optimizer['lr'] = 0.001 
 optimizer['use_lr_scheduler'] = False
 config['optimizer'] = optimizer
 
 # loss function
 criterion = {}
-criterion['name'] = 'sparse_categorical_crossentropy'
+criterion['type'] = 'sparse_categorical_crossentropy'
 config['criterion'] = criterion
 
 

@@ -2,10 +2,11 @@ import tensorflow as tf
 from tensorflow import keras 
 import numpy as np 
 import os, sys, shutil
+import importlib
 
 
 def get_optimizer(optim_type, learning_rate, *args, **kwargs):
-    if optim_type == 'adam':
+    if optim_type == 'Adam':
         optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
 

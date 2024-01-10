@@ -3,7 +3,7 @@ from tensorflow import keras
 import numpy as np 
 import os, sys, shutil 
 from typing import Union
-from common import ConvLayer
+from .common import ConvLayer, LinearLayer, LRNLayer
 
 
 class AlexNetContextPrediction(tf.keras.models.Model):
