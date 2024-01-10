@@ -11,7 +11,7 @@ from datetime import datetime
 AUTO = tf.data.experimental.AUTOTUNE
 
 
-class RotateNetDataLoader:
+class RotationPredictionDataLoader:
     def __init__(self, 
                 args,
                 image_files_path, 

@@ -1,7 +1,7 @@
 config = {}
 
 model = {}
-model['patch_size'] = 15
+model['patch_dim'] = 15
 model['gap'] = 2
 model['img_size'] = 96 
 model['num_classes'] = 8

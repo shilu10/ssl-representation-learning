@@ -6,6 +6,7 @@ from typing import Union
 from .common import ConvLayer, LinearLayer, LRNLayer
 
 
+
 class AlexNetContextPrediction(tf.keras.models.Model):
   def __init__(self, config, n_classes=1000, *args, **kwargs):
     super(AlexNetContextPrediction, self).__init__(*args, **kwargs)
@@ -107,46 +108,26 @@ class AlexNetContextPrediction(tf.keras.models.Model):
 
     return out_feat_keys, max_out_feat
 
-  def forward_once(self, inputs, out_feat_keys, out_feats):
+  def forward_once(self, inputs):
 
     x = self.conv_1(inputs)
-
-    #if 'conv1' in out_feat_keys:
-     # out_feats[out_feat_keys.index('conv1')] = x
 
     x = self.lrn_1(x)
     x = self.conv_2(x)
 
-   # if 'conv2' in out_feat_keys:
-    #  out_feats[out_feat_keys.index('conv2')] = x
-
     x = self.lrn_2(x)
     x = self.conv_3(x)
 
-   # if 'conv3' in out_feat_keys:
-    #  out_feats[out_feat_keys.index('conv3')] = x
-
     x = self.conv_4(x)
 
-    #if 'conv4' in out_feat_keys:
-     # out_feats[out_feat_keys.index('conv4')] = x
-
     x = self.conv_5(x)
-
-   # if 'conv5' in out_feat_keys:
-    #  out_feats[out_feat_keys.index('conv5')] = x
 
     x = self.flatten(x)
     x = self.fc_1(x)
 
-    #if 'fc1' in out_feat_keys:
-     # out_feats[out_feat_keys.index('fc1')] = x
-
     return x
 
-  def call(self, inputs, training=False, out_feat_keys=None):
-    out_feat_keys, max_out_feat = self._parse_out_keys_arg(out_feat_keys)
-    out_feats = [None] * len(out_feat_keys)
+  def call(self, inputs, training=False):
     
     # B-batch, 2, H-height, W-width, C-channels
     B, T, H, W, C = inputs.shape
@@ -159,15 +140,7 @@ class AlexNetContextPrediction(tf.keras.models.Model):
 
     x = self.fc_2(combined_feats)
 
-   # if 'fc2' in out_feat_keys:
-   #   out_feats[out_feat_keys.index('fc2')] = x
-
     out = self.out(x)
-
-    #if 'classifer' in out_feat_keys:
-     # out_feats[out_feat_keys.index('classifer')] = out
-
-    #out_feats = out_feats[0] if len(out_feats)==1 else out_feats
 
     return out
 
@@ -194,15 +167,13 @@ if __name__ == '__main__':
     
     class Config:
         def __init__(self):
-            self.num_stages = num_stages
-            self.use_avg_on_conv3 = use_avg_on_conv3
+            pass 
 
     config = Config()
 
-    model = create_model(config, 4)
+    model = create_model(config, 8)
 
     x = tf.random.uniform((1, size, size, 3), -1, 1)
     out = model(x, None)
 
-    for f, feat in enumerate(out):
-        print(f'Output feature conv{f+1} - size {feat.shape}')
+    print(f"output shape: {out.shape}")

@@ -7,19 +7,19 @@ import importlib
 
 def get_optimizer(optim_type, learning_rate, *args, **kwargs):
     if optim_type == 'Adam':
-        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        optimizer = tf.keras.optimizers.Adam()
 
 
     return optimizer
 
 
 def get_criterion(criterion_type, reduction_type=None, from_logits=False):
-    if criterion_type == 'mse':
+    if criterion_type == 'mean_squared_error':
         loss_func = tf.keras.losses.MeanSquaredError(
                             reduction='auto',
                             name='mean_squared_error')
 
-    elif criterion_type == 'bce':
+    elif criterion_type == 'binary_crossentropy':
         loss_func = tf.keras.losses.BinaryCrossentropy(from_logits)
 
     elif criterion_type == 'sparse_categorical_crossentropy':
