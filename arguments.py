@@ -93,7 +93,7 @@ def  main_parse_args():
 
 def main_pretext_parse_args():
 
-    parser = argparse.ArgumentParser()
+    parser = ArgumentParser()
     # model, save, load args
     parser.add_argument('--checkpoint', 
                         type=str, 
