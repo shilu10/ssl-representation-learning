@@ -45,5 +45,4 @@ model['overlap_weight_multiplier'] = 10
 model['random_masking'] = False
 model['num_classes'] = 10 # just random to maintain consistency in configs
 
-
 config['model'] = model
