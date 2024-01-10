@@ -22,10 +22,10 @@ def get_criterion(criterion_type, reduction_type=None, from_logits=False):
     elif criterion_type == 'bce':
         loss_func = tf.keras.losses.BinaryCrossentropy(from_logits)
 
-    elif criterion_type == 'sparse_categorical_ce':
+    elif criterion_type == 'sparse_categorical_crossentropy':
         loss_func = tf.keras.losses.SparseCategoricalCrossentropy(from_logits)
 
-    elif criterion_type == 'categorical_ce':
+    elif criterion_type == 'categorical_crossentropy':
         loss_func = tf.keras.losses.CategoricalCrossentropy(from_logits)
 
 

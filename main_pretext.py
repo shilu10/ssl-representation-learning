@@ -70,7 +70,8 @@ def main(args):
 	#------------------------
 	# Dataloaders
 	#------------------------
-	train_dataloader = getattr(dataloaders, config.dataloader.get('type'))
+	train_dataloader = getattr(dataloaders,
+							   config.dataloader.get('type'))
 	train_dataloader = train_dataloader(args=config, 
 										image_files_path=train_image_files_path, 
 										labels=train_labels, 
@@ -104,14 +105,17 @@ def main(args):
 		else:
 			out_size = mask_size
 
-		context_generator = getattr(networks, config.networks.get('generator_name'))
+		context_generator = getattr(networks, 
+									config.networks.get('generator_name'))
 		context_generator = context_generator(bottleneck_dim=config.main.get('bottleneck_dim'), 
 											img_size=img_size, 
 											out_size=out_size, 
 											channels=3)
 
-		context_discriminator = getattr(networks, config.networks.get('discriminator_name'))
-		context_discriminator = context_discriminator(input_size=out_size, in_channels=3)
+		context_discriminator = getattr(networks, 
+										config.networks.get('discriminator_name'))
+		context_discriminator = context_discriminator(input_size=out_size,
+													 in_channels=3)
 
 	else:
 		network = getattr(networks, config.networks.get('type'))
@@ -142,7 +146,8 @@ def main(args):
 		reconstruction_criterion = get_criterion(config.criterion.get('reconstruction_type'))
 
 	else:
-		criterion = get_criterion(config.criterion.get('type'), from_logits=True)
+		criterion = get_criterion(config.criterion.get('type'),
+								 from_logits=True)
 
 
 	#--------------------------------
@@ -161,7 +166,9 @@ def main(args):
 								  optimizer=optimizer, 
 								  net=network)
 
-	manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=3)
+	manager = tf.train.CheckpointManager(checkpoint=ckpt,
+										 directory=args.checkpoint,
+										 max_to_keep=3)
 
 	ckpt.restore(manager.latest_checkpoint)
 
@@ -208,7 +215,7 @@ def main(args):
 	# ----------------------------------
 	# Load Summary Writer
 	# ----------------------------------
-	common_log_parent_path = f'{args.tensorboard}/batch_level/' + datetime.now().strftime("%Y%m%d-%H%M%S") + args.model_type
+	common_log_parent_path = f'{args.tensorboard}/batch_level/' + datetime.now().strftime("%Y%m%d-%H%M%S") + args.pretext_task_type
 	train_log_dir = common_log_parent_path + '/train'
 	train_writer = tf.summary.create_file_writer(train_log_dir)
 
@@ -242,7 +249,7 @@ def main(args):
 	#----------------------
 	# Start train and val
 	#----------------------
-	if config.model.random_masking:
+	if config.model.get('random_masking'):
 		global_random_pattern = generate_random_pattern(mask_area=config.model.get('mask_area'), 
 														resolution=config.model.get('resolution'), 
 														max_pattern_size=config.model.get('max_pattern_size'))
@@ -263,10 +270,10 @@ def main(args):
 			# initial updation of val progbar
 
 			# for context encoder
-			if pretext_task_type == 'context_encoder':
+			if args.pretext_task_type == 'context_encoder':
 				samples, _ = batch
 
-				if not args.random_masking:
+				if not config.model.get('random_masking'):
 					true_masks, masked_samples, _ = get_center_block_mask(samples=samples.numpy(), 
 	                													mask_size=mask_size,
 	                													overlap=args.model.get('overlap'))
@@ -358,16 +365,16 @@ def main(args):
 			for val_step, val_batch in enumerate(val_dataloader):
 
 				# for context_encoder
-				if pretext_task_type == 'context_encoder':
+				if args.pretext_task_type == 'context_encoder':
 					samples, _ = batch 
-					if not args.random_masking:
+					if not config.model.get('random_masking'):
 						true_masks, masked_samples, _ = get_center_block_mask(samples.numpy(), mask_size, args.overlap)
 						masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 						true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
 						masked_region = None
 
 					else:
-						masked_samples, masked_region = get_random_region_mask(samples.numpy(), config.model.img_size, config.model.mask_area, global_random_pattern)
+						masked_samples, masked_region = get_random_region_mask(samples.numpy(), config.model.get('img_size'), config.model.get('mask_area'), global_random_pattern)
 						masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 						true_masks = samples
 
