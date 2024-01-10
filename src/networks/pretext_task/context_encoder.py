@@ -182,9 +182,9 @@ class ContextDeocder(tf.keras.models.Model):
         return out
     
 
-class ContextGenerator(tf.keras.models.Model):
+class ContextEncoderGenerator(tf.keras.models.Model):
     def __init__(self, bottleneck_dim, img_size, out_size, channels, *args, **kwargs):
-        super(ContextGenerator, self).__init__(*args, **kwargs)
+        super(ContextEncoderGenerator, self).__init__(*args, **kwargs)
         self.bottleneck_dim = bottleneck_dim
         self.img_size = img_size 
         self.out_size = out_size 
@@ -200,9 +200,9 @@ class ContextGenerator(tf.keras.models.Model):
         return x 
     
     
-class ContextDiscriminator(tf.keras.Model):
+class ContextEncoderDiscriminator(tf.keras.Model):
     def __init__(self, input_size: int = 128, in_channels=3, *args, **kwargs):
-        super(ContextDiscriminator, self).__init__(*args, **kwargs)
+        super(ContextEncoderDiscriminator, self).__init__(*args, **kwargs)
         self.in_channels = in_channels
         self.input_size = input_size 
         

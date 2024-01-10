@@ -120,7 +120,7 @@ def main_pretext_parse_args():
     parser.add_argument('--pretext_task_type', 
                         type=str, 
                         default='jigsaw', 
-                        choices=['jigsaw', 'rotation', 'context_prediction', 'context_encoder'],
+                        choices=['jigsaw', 'rotation_prediction', 'context_prediction', 'context_encoder'],
                         help='type of pretext task')
 
     parser.add_argument('--unlabeled_datapath', 

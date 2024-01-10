@@ -136,8 +136,7 @@ if __name__ == '__main__':
     
     class Config:
         def __init__(self):
-            self.num_stages = num_stages
-            self.use_avg_on_conv3 = use_avg_on_conv3
+            pass 
 
     config = Config()
 
@@ -146,5 +145,4 @@ if __name__ == '__main__':
     x = tf.random.uniform((1, size, size, 3), -1, 1)
     out = model(x, None)
 
-    for f, feat in enumerate(out):
-        print(f'Output feature conv{f+1} - size {feat.shape}')
+    print(f"output shape: {out.shape}")

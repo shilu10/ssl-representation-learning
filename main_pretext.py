@@ -21,13 +21,24 @@ AUTO = tf.data.experimental.AUTOTUNE
 
 def main(args):
 	global_random_pattern = None
+
+	#---------------------------
+	# Load config
+	#---------------------------
+
+	module_name = "config"
+	file_path = args.config_path
+
+	config = load_module_from_source(module_name, file_path)
 	
 	# assertion errors
-	#if args.pretext_task_type == 'jigsaw':
-	#	permutation_arr_path = args.permutation_arr_path
-	#	assert os.path.exists(args.permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
-	#	permutation_arr_path_n_classes = permutation_arr_path.split('.')[0].split('_')[-1]
-	#	assert permutation_arr_path_n_classes == args.num_classes, "permutation_arr_path mismatch with num_classes"
+	if args.pretext_task_type == 'jigsaw':
+		permutation_arr_path = config.model.get('permutation_path')
+		assert os.path.exists(permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
+		
+		permutation_arr_path_n_classes = permutation_arr_path.split('.')[0].split('_')[-1]
+		print(permutation_arr_path_n_classes)
+		assert int(permutation_arr_path_n_classes) == config.model.get("num_classes"), "permutation_arr_path mismatch with num_classes"
 	
 	assert os.path.exists(args.unlabeled_datapath), f"no file or folder exists at {args.unlabeled_datapath}"
 	
@@ -38,15 +49,6 @@ def main(args):
 
 	#else: 
 	#	print('CPU mode')
-
-	#---------------------------
-	# Load config
-	#---------------------------
-
-	module_name = "config"
-	file_path = args.config_path
-
-	config = load_module_from_source(module_name, file_path)
 
 
 	# ---------------------------
@@ -98,16 +100,16 @@ def main(args):
 	if args.pretext_task_type == 'context_encoder':
 		img_size = config.model.get('img_size')
 		mask_area = config.model.get('mask_area')
-		mask_size = int(np.sqrt() * img_size)
+		mask_size = int(np.sqrt(mask_area) * img_size)
 
-		if config.model.random_masking:
+		if config.model.get('random_masking'):
 			out_size = img_size
 		else:
 			out_size = mask_size
 
 		context_generator = getattr(networks, 
 									config.networks.get('generator_name'))
-		context_generator = context_generator(bottleneck_dim=config.main.get('bottleneck_dim'), 
+		context_generator = context_generator(bottleneck_dim=config.model.get('bottleneck_dim'), 
 											img_size=img_size, 
 											out_size=out_size, 
 											channels=3)
@@ -215,7 +217,9 @@ def main(args):
 	# ----------------------------------
 	# Load Summary Writer
 	# ----------------------------------
-	common_log_parent_path = f'{args.tensorboard}/batch_level/' + datetime.now().strftime("%Y%m%d-%H%M%S") + args.pretext_task_type
+	common_log_parent_path = f'{args.tensorboard}/batch_level/' + \
+							datetime.now().strftime("%Y%m%d-%H%M%S") + \
+							args.pretext_task_type
 	train_log_dir = common_log_parent_path + '/train'
 	train_writer = tf.summary.create_file_writer(train_log_dir)
 
@@ -231,7 +235,8 @@ def main(args):
 	if args.pretext_task_type != 'context_encoder':
 		metrics_names = ['loss', 'top1_acc', 'top5_acc']
 	else:
-		metrics_names = ['gen_total_loss', 'gen_adv_loss', 'gen_recon_loss', 'disc_loss', 'disc_acc']
+		metrics_names = ['gen_total_loss', 'gen_adv_loss', \
+							 'gen_recon_loss', 'disc_loss', 'disc_acc']
 
 	stateful_metrics += metrics_names
 
@@ -368,13 +373,20 @@ def main(args):
 				if args.pretext_task_type == 'context_encoder':
 					samples, _ = batch 
 					if not config.model.get('random_masking'):
-						true_masks, masked_samples, _ = get_center_block_mask(samples.numpy(), mask_size, args.overlap)
+						true_masks, masked_samples, _ = get_center_block_mask(samples=samples.numpy(),
+																			 mask_size=mask_size,
+																			 overlap=args.model.get('overlap'))
+
 						masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 						true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
 						masked_region = None
 
 					else:
-						masked_samples, masked_region = get_random_region_mask(samples.numpy(), config.model.get('img_size'), config.model.get('mask_area'), global_random_pattern)
+						masked_samples, masked_region = get_random_region_mask(samples=samples.numpy(),
+																			 img_size=config.model.get('img_size'),
+																			 mask_area=config.model.get('mask_area'),
+																			 global_random_pattern=global_random_pattern)
+
 						masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 						true_masks = samples
 
@@ -532,8 +544,6 @@ def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker
 	#print(type(trainable_vars), len(trainable_vars))
 	gradients = tape.gradient(loss, trainable_vars)
 
-	#capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gradients]
-
 	# Update weights
 	optimizer.apply_gradients(zip(gradients, trainable_vars))
 	
@@ -652,7 +662,6 @@ def test_context_encoder(args, inputs, generator, recon_loss_func, val_gen_recon
         
     return gen_recon_loss
     
-
 
 if __name__ == '__main__':
 	args = main_pretext_parse_args()
