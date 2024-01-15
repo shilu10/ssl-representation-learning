@@ -148,7 +148,9 @@ if __name__ == '__main__':
 
     model = create_model(config, 10)
 
+    size = 128
+
     x = tf.random.uniform((1, size, size, 3), -1, 1)
-    out = model(x, None)
+    out = model(x)
 
     print(f"output shape: {out.shape}")

@@ -687,3 +687,5 @@ class PIRL(tf.keras.models.Model):
         batch_size = f_vi.shape[0]
         return self.n_way_softmax(f_vi, g_vit, negatives, temp) - tf.math.log(
             1 - tf.math.exp(-self.n_way_softmax(g_vit, negatives[:batch_size, :], negatives, temp)))
+
+
