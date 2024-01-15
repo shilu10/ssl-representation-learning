@@ -476,7 +476,7 @@ def main(args):
 
 		# for val
 		if args.use_validation:
-			if pretext_task_type != "context_encoder":
+			if args.pretext_task_type != "context_encoder":
 				val_epoch_loss = loss_tracker.result()
 				val_epoch_top1_acc = top1_acc.result()
 				val_epoch_top5_acc = top5_acc.result()
@@ -486,7 +486,7 @@ def main(args):
 
 			# epoch-level summary writer
 			with val_writer.as_default(step=epoch):
-				if pretext_task_type != "context_encoder":
+				if args.pretext_task_type != "context_encoder":
 					tf.summary.scalar('val_epoch_loss', val_epoch_loss)
 					tf.summary.scalar('val_epoch_top1_acc', val_epoch_top1_acc)
 					tf.summary.scalar('val_epoch_top5_acc', val_epoch_top5_acc)
@@ -496,7 +496,7 @@ def main(args):
 
 				val_writer.flush()
 
-		if pretext_task_type != "context_encoder":
+		if args.pretext_task_type != "context_encoder":
 			# reset the netrics
 			loss_tracker.reset_state()
 			top5_acc.reset_state()
@@ -509,7 +509,7 @@ def main(args):
 			dis_loss_tracker.reset_state()
 
 		if args.use_validation:
-			if pretext_task_type != "context_encoder":
+			if args.pretext_task_type != "context_encoder":
 				val_loss_tracker.reset_state()
 				val_top1_acc.reset_state()
 				val_top5_acc.reset_state()
