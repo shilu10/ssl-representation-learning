@@ -171,13 +171,13 @@ class ContextDeocder(tf.keras.models.Model):
         self.final_conv = tf.keras.layers.Conv2DTranspose(
                 out_channels, kernel_size=4, strides=2, padding='same', use_bias=False
         )
-        self.tanh = tf.keras.layers.Activation('tanh')
+        self.sigmoid = tf.keras.layers.Activation('sigmoid')
         
     def call(self, inputs, training=False):
         x = self.relu1(self.bn1(inputs))
         x = self.bottleneck_block(x)
         x = self.blocks(x)
-        out = self.tanh(self.final_conv(x))
+        out = self.sigmoid(self.final_conv(x))
         
         return out
     
@@ -250,8 +250,8 @@ if __name__ == '__main__':
 
 	inputs = tf.random.uniform((2, 128, 128, 3))
 
-	context_generator = ContextGenerator(1024, 128, 128, 3)
-	context_discriminator = ContextDiscriminator(128, 3)
+	context_generator = ContextEncoderGenerator(1024, 128, 128, 3)
+	context_discriminator = ContextEncoderDiscriminator(128, 3)
 
 	c_gen_output = context_generator(inputs)
 	c_dis_output = context_discriminator(c_gen_output)
