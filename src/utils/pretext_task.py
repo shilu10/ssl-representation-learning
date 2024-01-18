@@ -136,7 +136,8 @@ def get_random_region_mask(
     while True:
         x, y = np.random.randint(0, global_random_pattern.shape[0] - img_size, 2)
         mask = global_random_pattern[x: x + img_size, y: y + img_size]
-        pattern_mask_area = np.mean(mask.astype(float))
+        mask = mask.numpy()
+        pattern_mask_area = np.mean(mask.astype('float'))
         # If mask area is within +/- 25% of desired mask area, break and continue
         if mask_area / 1.25 < pattern_mask_area < mask_area * 1.25:
             break

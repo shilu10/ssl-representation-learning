@@ -8,6 +8,7 @@ import numpy as np
 import argparse 
 from datetime import datetime 
 import itertools 
+import pickle
 
 import src.networks.pretext_task as networks
 import src.data.pretext_task as dataloaders
@@ -37,7 +38,6 @@ def main(args):
 		assert os.path.exists(permutation_arr_path), "no file or folder exists, use hamming_set.py to initialize the permutation_arr"
 		
 		permutation_arr_path_n_classes = permutation_arr_path.split('.')[0].split('_')[-1]
-		print(permutation_arr_path_n_classes)
 		assert int(permutation_arr_path_n_classes) == config.model.get("num_classes"), "permutation_arr_path mismatch with num_classes"
 	
 	assert os.path.exists(args.unlabeled_datapath), f"no file or folder exists at {args.unlabeled_datapath}"
@@ -281,7 +281,7 @@ def main(args):
 				if not config.model.get('random_masking'):
 					true_masks, masked_samples, _ = get_center_block_mask(samples=samples.numpy(), 
 	                													mask_size=mask_size,
-	                													overlap=args.model.get('overlap'))
+	                													overlap=config.model.get('overlap'))
 
 					masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 					true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
@@ -289,8 +289,8 @@ def main(args):
 
 				else:
 					masked_samples, masked_region = get_random_region_mask(samples=samples.numpy(), 
-	                													img_size=args.model.get('img_size'),
-	                													mask_area=args.model.get('mask_area'),
+	                													img_size=config.model.get('img_size'),
+	                													mask_area=config.model.get('mask_area'),
 	                													global_random_pattern=global_random_pattern)
 
 					masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
@@ -298,14 +298,16 @@ def main(args):
 
 				inputs = (masked_samples, true_masks, masked_region)
 
+
 				results = train_context_encoder(args=args, 
+						   config=config,
 	                       inputs=inputs, 
-	                       generator=context_gen, 
-	                       discriminator=context_dis, 
-	                       g_optim=cg_optim, 
-	                       d_optim=cd_optim, 
-	                       adv_loss_func=adversarial_loss, 
-	                       recon_loss_func=reconstruction_loss,
+	                       generator=context_generator, 
+	                       discriminator=context_discriminator, 
+	                       g_optim=g_optimizer, 
+	                       d_optim=d_optimizer, 
+	                       adv_loss_func=adversial_criterion, 
+	                       recon_loss_func=reconstruction_criterion,
 	                       gen_total_loss_tracker=gen_total_loss_tracker, 
 	                       gen_adv_loss_tracker=gen_adv_loss_tracker, 
 	                       gen_recon_loss_tracker=gen_recon_loss_tracker, 
@@ -375,7 +377,7 @@ def main(args):
 					if not config.model.get('random_masking'):
 						true_masks, masked_samples, _ = get_center_block_mask(samples=samples.numpy(),
 																			 mask_size=mask_size,
-																			 overlap=args.model.get('overlap'))
+																			 overlap=config.model.get('overlap'))
 
 						masked_samples = tf.convert_to_tensor(masked_samples, dtype=tf.float32)
 						true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
@@ -394,7 +396,7 @@ def main(args):
 					inputs = (masked_samples, true_masks, masked_region)
 					results = test_context_encoder(args=args, 
 			                                inputs=inputs, 
-			                                generator=context_gen, 
+			                                generator=context_generator, 
 			                                recon_loss_func=reconstruction_loss,
 			                                val_gen_recon_loss_tracker=val_gen_recon_loss_tracker
 			                            )
@@ -570,6 +572,7 @@ def test(network, batch, criterion, top1_acc, top5_acc, loss_tracker):
 
 
 def train_context_encoder(args,
+					   config,
 		               inputs, 
 		               generator, 
 		               discriminator, 
@@ -586,17 +589,17 @@ def train_context_encoder(args,
     
     # training generators
     true_labels = tf.ones(args.batch_size)
-    fake_labels = tf.ones(args.batch_size)
+    fake_labels = tf.zeros(args.batch_size)
     
     # discrimnator gradient cal
     with tf.GradientTape() as tape:
         # train discrinator
-        dis_true_output = discriminator(true_masks)
+        dis_true_output = discriminator(true_masks, training=True)
         
         # generate fake images
-        gen_fake_output = generator(masked_samples, training=True)
+        gen_fake_input = generator(masked_samples, training=True)
         
-        dis_fake_output = discriminator(gen_fake_output, training=True)
+        dis_fake_output = discriminator(gen_fake_input, training=True)
         
         true_output_loss = adv_loss_func(true_labels, dis_true_output)
         fake_output_loss = adv_loss_func(fake_labels, dis_fake_output)
@@ -611,18 +614,18 @@ def train_context_encoder(args,
     
     # generator gradient cal
     with tf.GradientTape() as tape:
-        gen_fake_output = generator(masked_samples, training=True)
-        
-        dis_fake_output = discriminator(gen_fake_output, training=True)
-        
+        gen_fake_input = generator(masked_samples, training=True)
+
+        dis_fake_output = discriminator(gen_fake_input)
+
         # Compute adversarial loss for generator
         gen_adv_loss = adv_loss_func(true_labels, dis_fake_output)
-        
+
         # compute generator recontruction loss
         # l2_weights = get_l2_weights(args, gen_fake_output.shape, masked_region)
-        gen_recon_loss = recon_loss_func(true_masks, gen_fake_output)
+        gen_recon_loss = recon_loss_func(true_masks, gen_fake_input)
         
-        gen_total_loss = (1 - args.w_rec) * gen_adv_loss + args.w_rec * gen_recon_loss
+        gen_total_loss = (1 - config.model.get('r_weight')) * gen_adv_loss + config.model.get('r_weight') * gen_recon_loss
         
     trainable_vars = generator.trainable_weights
     gradients = tape.gradient(gen_total_loss, trainable_vars)

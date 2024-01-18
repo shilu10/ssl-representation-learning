@@ -2,3 +2,4 @@ from .common import Common
 from .context_prediction import ContextPredictionDataLoader
 from .jigsaw import JigSawDataLoader
 from .rotation_prediction import RotationPredictionDataLoader
+from .context_encoder import ContextEncoderDataLoader
