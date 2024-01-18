@@ -527,9 +527,6 @@ def main(args):
 			print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
 			print("loss {:1.2f}".format(epoch_loss.numpy()))
 
-
-	tf.summary.FileWriter.close()
-
 		
 def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker):
 	inputs, labels = batch 
