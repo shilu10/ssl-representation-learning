@@ -22,6 +22,11 @@ model here outputs logits while the Keras model outputs probability.
 """
 
 from .common import _ConvBlock, _IdentityBlock
+import tensorflow as tf 
+from tensorflow import keras 
+import numpy as np 
+from tensorflow.keras import layers 
+
 
 # pylint: disable=not-callable
 class ResNet18(tf.keras.Model):

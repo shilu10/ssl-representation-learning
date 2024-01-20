@@ -4,7 +4,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.losses import sparse_categorical_crossentropy
 import numpy as np 
-from ..networks import ResNet18, ProjectionHead
+from ..networks import contrastive_task as networks
 
 # https://github.com/drkostas?tab=repositories
 
@@ -18,15 +18,34 @@ class BYOL(tf.keras.models.Model):
         super(BYOL, self).__init__(dynamic=True, *args, **kwargs)
         self.config = config 
         self.m = 0.99
-        self.f_online = ResNet18(data_format="channels_last",
-                                trainable=True)                  # encoder_online
-        self.g_online = ProjectionHead()                         # projection head 1 
-        self.q_online = ProjectionHead()                         # projection head 2
 
-        # target network (asymmetic)
-        self.f_target = ResNet18(data_format="channels_last",
-                                trainable=False)                 # encoder target 
-        self.g_target = ProjectionHead()                         # projection head 1 target 
+        # online encoder
+        f_online = getattr(networks, 
+                          config.model.get("encoder_type"))             # encoder_online
+        self.f_online = f_online(data_format="channels_last",
+                                trainable=True)                  
+        
+        # online projection head 1
+        g_online = getattr(networks,
+                           config.model.get("projectionhead_1_type"))   # projection head 1 
+        self.g_online = g_online()                                     
+       
+        # online projection head 2 
+        q_online = getattr(networks,
+                           config.model.get("projectionhead_2_type"))   # projection head 2
+        self.q_online = q_online()                         
+
+        # target encoder
+        f_target = getattr(networks, 
+                          config.model.get("encoder_type"))             # encoder_target
+        self.f_target = f_target(data_format="channels_last",
+                                trainable=True)                  
+
+        
+        # target projection head 
+        g_target = getattr(networks,
+                           config.model.get("projectionhead_1_type"))   # projection head 1 target 
+        self.g_target = g_target()                             
 
         self._initialize_target_network()
 
