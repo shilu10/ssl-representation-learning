@@ -32,8 +32,10 @@ def  main_parse_args():
     parser.add_argument('--contrastive_task_type', type=str,
                         default='simclr', help="type of ssl model to train, options(simclr, mocov1, v2)")
 
-    parser.add_argument('--unlabeled_datapath', type=str, 
-                        default='cifar_dataset/train/', help="Directory path for the unlabeled data")
+    parser.add_argument('--unlabeled_datapath', 
+                        type=str, 
+                        default='./stl10/unlabeled_images/',
+                        help='directory path to unlabeled data')
 
     parser.add_argument('--batch_size', type=int, 
                         default=32, help="Batch Size, to be used in the dataloader")
@@ -42,6 +44,16 @@ def  main_parse_args():
                         default=True, help="Boolean value tells whether or not to shuffle data in the dataloader")
 
     parser.add_argument("--gpus", type=str, default='-1')
+
+    parser.add_argument('--config_path', 
+                        type=str, 
+                        default='config/', 
+                        help='config path for specific pretext task')
+
+    parser.add_argument('--use_validation', 
+                        default=False,
+                        type=bool, 
+                        help='to use validation or not, if True it splits the unlabeled data into train and val')
 
     return parser.parse_args()
 

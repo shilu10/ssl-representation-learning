@@ -100,6 +100,7 @@ class ResNet18(tf.keras.Model):
         data_format=data_format,
         padding='same',
         name='conv1')
+    
     bn_axis = 1 if data_format == 'channels_first' else 3
     self.bn_conv1 = layers.BatchNormalization(axis=bn_axis, name='bn_conv1')
     self.max_pool = layers.MaxPooling2D((3, 3),
@@ -126,6 +127,7 @@ class ResNet18(tf.keras.Model):
                             stage=5,
                             block='a',
                             strides=(1, 1))
+
     else:
       self.l5a = conv_block([512, 512, 2048], stage=5, block='a')
     self.l5b = id_block([512, 512, 2048], stage=5, block='b')
@@ -137,14 +139,17 @@ class ResNet18(tf.keras.Model):
     if self.include_top:
       self.flatten = layers.Flatten()
       self.fc1000 = layers.Dense(classes, name='fc1000')
+
     else:
       reduction_indices = [1, 2] if data_format == 'channels_last' else [2, 3]
       reduction_indices = tf.constant(reduction_indices)
+
       if pooling == 'avg':
         self.global_pooling = functools.partial(
             tf.reduce_mean,
             axis=reduction_indices,
             keepdims=False)
+
       elif pooling == 'max':
         self.global_pooling = functools.partial(
             tf.reduce_max, reduction_indices=reduction_indices, keep_dims=False)
@@ -195,6 +200,7 @@ class ResNet18(tf.keras.Model):
       x = self.subsampling_layer(x)
       if intermediates_dict is not None:
         intermediates_dict['block3'] = x
+
     else:
       if intermediates_dict is not None:
         intermediates_dict['block3'] = x
@@ -206,14 +212,17 @@ class ResNet18(tf.keras.Model):
       x = self.avg_pool(x)
       if intermediates_dict is not None:
         intermediates_dict['block4'] = x
+
     else:
       if intermediates_dict is not None:
         intermediates_dict['block4'] = x
 
     if self.include_top:
       return self.fc1000(self.flatten(x))
+
     elif self.global_pooling:
       return self.global_pooling(x)
+
     else:
       return x
 

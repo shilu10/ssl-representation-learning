@@ -21,30 +21,30 @@ class BYOL(tf.keras.models.Model):
 
         # online encoder
         f_online = getattr(networks, 
-                          config.model.get("encoder_type"))             # encoder_online
+                          config.networks.get("encoder_type"))             # encoder_online
         self.f_online = f_online(data_format="channels_last",
                                 trainable=True)                  
         
         # online projection head 1
         g_online = getattr(networks,
-                           config.model.get("projectionhead_1_type"))   # projection head 1 
+                           config.networks.get("projectionhead_1_type"))   # projection head 1 
         self.g_online = g_online()                                     
        
         # online projection head 2 
         q_online = getattr(networks,
-                           config.model.get("projectionhead_2_type"))   # projection head 2
+                           config.networks.get("projectionhead_2_type"))   # projection head 2
         self.q_online = q_online()                         
 
         # target encoder
         f_target = getattr(networks, 
-                          config.model.get("encoder_type"))             # encoder_target
+                          config.networks.get("encoder_type"))             # encoder_target
         self.f_target = f_target(data_format="channels_last",
                                 trainable=True)                  
 
         
         # target projection head 
         g_target = getattr(networks,
-                           config.model.get("projectionhead_1_type"))   # projection head 1 target 
+                           config.networks.get("projectionhead_1_type"))   # projection head 1 target 
         self.g_target = g_target()                             
 
         self._initialize_target_network()
@@ -60,10 +60,15 @@ class BYOL(tf.keras.models.Model):
         self.loss = loss
         self.acc_metrics = metrics
 
+    def call(self, inputs):
+        x = self.f_online(inputs)
+        x = self.g_online(x)
+
+        return x 
+
     def reset_metrics(self):
         self.contrastive_accuracy.reset_states()
         self.correlation_accuracy.reset_states()
-        self.loss_tracker.reset_states()
 
     def update_contrastive_accuracy(self, features_1, features_2):
         features_1 = tf.math.l2_normalize(features_1, axis=1)
@@ -100,11 +105,14 @@ class BYOL(tf.keras.models.Model):
         )
 
     def train_step(self, inputs):
+
   
-        x1 = inputs['view1']    # (bs, img_size, img_size, 3)
-        x2 = inputs['view2']    # (bs, img_size, img_size, 3)
+        x1 = inputs[0]    # (bs, img_size, img_size, 3)
+        x2 = inputs[1]   # (bs, img_size, img_size, 3)
 
         batch_size = x1.shape[0]
+
+        print(batch_size)
 
         # pass first view of image through target network
         h_target_1 = self.f_target(x1, training=True)
@@ -125,26 +133,34 @@ class BYOL(tf.keras.models.Model):
             z_online_2 = self.g_online(h_online_2, training=True)
             p_online_2 = self.q_online(z_online_2, training=True)
 
-            p_online = tf.concat(p_online_1, p_online_2, axis=0)
-            z_target = tf.concat(z_target_1, z_target_2, axis=0)
+            p_online = tf.concat([p_online_1, p_online_2], axis=0)
+            z_target = tf.concat([z_target_1, z_target_2], axis=0)
 
             loss = self.loss(p_online, z_target)
-
 
         # Backward pass (update online networks)
         f_params = self.f_online.trainable_variables
         g_params = self.g_online.trainable_variables
         q_params = self.q_online.trainable_variables
 
-        grads = tape.gradient(loss, f_params)
-        self.optimizer.apply_gradients(zip(grads, f_params))
+        # Compute gradients
+        grads_f = tape.gradient(loss, f_params)
+        grads_g = tape.gradient(loss, g_params)
+        grads_q = tape.gradient(loss, q_params)
 
-        grads = tape.gradient(loss, g_params)
-        self.optimizer.apply_gradients(zip(grads, g_params))
+        # Apply gradients using apply_gradients
+        self.optimizer.apply_gradients(zip(grads_f, f_params))
+        self.optimizer.apply_gradients(zip(grads_g, g_params))
+        self.optimizer.apply_gradients(zip(grads_q, q_params))
 
-        grads = tape.gradient(loss, q_params)
-        self.optimizer.apply_gradients(zip(grads, q_params))
+        # Update model's variables using the optimizer
+        # (if you still prefer to use minimize, provide the tape explicitly)
+        self.optimizer.minimize(lambda: loss, var_list=f_params, tape=tape)
+        self.optimizer.minimize(lambda: loss, var_list=g_params, tape=tape)
+        self.optimizer.minimize(lambda: loss, var_list=q_params, tape=tape)
 
+        # Delete the tape to free up resources
+        del tape
         self.update_contrastive_accuracy(p_online, z_target)
         self.update_correlation_accuracy(p_online, z_target)
 
@@ -214,6 +230,19 @@ class BYOL(tf.keras.models.Model):
             g_target_weights[i] = self.m * g_target_weights[i] + (1 - self.m) * g_online_weights[i] 
 
         self.f_target.set_weights(f_target_weights)
-        self.q_target.set_weights(g_target_weights)
+        self.g_target.set_weights(g_target_weights)
 
+    def one_step(self, input_shape):
+        inputs = tf.zeros(input_shape)
 
+        x = self(inputs)
+        x = self.q_online(x)
+
+    def get_all_trainable_params(self):
+        f_online_params = self.f_online.trainable_weights
+        g_online_params = self.g_online.trainable_weights
+        q_online_params = self.q_online.trainable_weights
+
+        all_online_params = f_online_params + g_online_params + q_online_params
+
+        return all_online_params

@@ -1,19 +1,22 @@
 import tensorflow as tf 
 from tensorflow import keras 
-import os, sys, shutil
+import os, sys, shutil, imutils
 import numpy as np 
 from argparse import ArgumentParser
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # suppress info-level logs 
 from tensorflow.keras.layers.experimental import preprocessing
 
-from atguments import main_parse_args
+from arguments import main_parse_args
+from helper import get_logger
 
 import src.data.contrastive_task as dataloaders 
 import src.losses as losses 
 import src.algorithms as algorithms
 
 from src.utils.common import load_module_from_source
+
+import pickle 
 
 
 tf.get_logger().setLevel("WARN")  # suppress info-level logs
@@ -37,7 +40,7 @@ def main(args):
     for k, v in vars(args).items():
         logger.info("{} : {}".format(k, v))
 
-    image_files_path = list(paths.list_images(args.unlabeled_datapath))
+    image_files_path = list(imutils.paths.list_images(args.unlabeled_datapath))
     
     if args.use_validation:
         num_val_images = int(len(image_files_path) * args.val_split_size)
@@ -57,6 +60,12 @@ def main(args):
                             batch_size=args.batch_size, 
                             shuffle=args.shuffle).create_dataset()
 
+    for batch in dataloader.take(1):
+        with open("data.pickle", "wb") as f:
+            pickle.dump(batch, f)
+
+    return 
+
 
     n_image_files = len(train_image_files_path)
     steps_per_epoch = n_image_files / args.batch_size
@@ -68,7 +77,7 @@ def main(args):
     ########################
     # Load Model
     ########################
-    model = getattr(algorithms, config.model.get("type"))
+    model = getattr(algorithms, config.model.get('algorithm_type'))
     model = model(config)
 
     #####################
@@ -77,10 +86,16 @@ def main(args):
 
     optimizer = tf.keras.optimizers.Adam()
 
+    # Build the optimizer with all trainable variables
+    img_dim = config.model.get("img_shape")
+    model.one_step(input_shape=(1, img_dim, img_dim, 3))
+    all_trainable_params = model.get_all_trainable_params
+    optimizer.build(all_trainable_params)
+
     ###################
     # Criterion
     ###################
-    loss = getattr(losses, config.model.get("criterion_type"))
+    loss = getattr(losses, config.criterion.get("type"))()
 
     ###################
     # CALLBACKS
@@ -95,7 +110,7 @@ def main(args):
         save_weights_only=True,
     )
 
-    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard + '/' + args.model_type, 
+    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard + '/' + args.contrastive_task_type, 
                                                 update_freq=1)
 
     model.compile(
