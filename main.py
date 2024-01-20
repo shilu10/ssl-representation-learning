@@ -7,6 +7,8 @@ from argparse import ArgumentParser
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # suppress info-level logs 
 from tensorflow.keras.layers.experimental import preprocessing
 
+from atguments import main_parse_args
+
 import src.data.contrastive_task as dataloaders 
 import src.losses as losses 
 import src.algorithms as algorithms
@@ -114,5 +116,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    args = get_args()
+    args = main_parse_args()
     main(args)

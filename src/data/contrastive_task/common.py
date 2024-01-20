@@ -6,7 +6,7 @@ import imutils, random
 from ..augmentations import contrastive_task as augments
 
 
-class DataLoader:
+class Common:
 	def __init__(self, config, image_files_path, batch_size=32, split="train", shuffle=True):
 		self.config = config 
 		self.batch_size = batch_size
@@ -22,7 +22,7 @@ class DataLoader:
 		return image 
 
 	def __augment(self, image):
-		augmenter = getattr(augments, self.config.augmentations.get("type"))
+		augmenter = getattr(augments, self.config.dataloader.get("augmentations_type"))
 		augmenter = augmenter(self.config)
 
 		view1 = augmenter.transform(image)
