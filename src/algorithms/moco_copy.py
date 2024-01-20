@@ -14,45 +14,45 @@ class MoCo(tf.keras.models.Model):
         super(MoCo, self).__init__(dynamic=True)
         self.config = config 
 
-        self.m = config.model.get("m")
-        self.version = config.model.get("version")
-        self.temp = config.model.get("temp")
+        self.m = m
+        self.version = version
+        #self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
         
-        feature_dims = config.model.get("feature_dims")
-        self.feature_dims = feature_dims
-        queue_len = config,model.get("queue_len")
-        self.queue_len = queue_len
+        feature_dimensions = encoder.output_shape[1]
+        self.temp = 0.07
 
         # encoder and projection head
         self.encoder = getattr(networks, config.network.get("encoder_type")) 
         self.projection_head = getattr(networks, config.network.get("projection_head")) 
 
-        # the momentum networks are initialized from their online counterparts
-        self.m_encoder = tf.keras.models.clone_model(self.encoder)
-        self.m_projection_head = tf.keras.models.clone_model(self.projection_head)
+        # metric function 
+        self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+        self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
-        self.initialize_queue(feature_dims, queue_len)
+        # the momentum networks are initialized from their online counterparts
+        self.m_encoder = keras.models.clone_model(self.encoder)
+        self.m_projection_head = keras.models.clone_model(self.projection_head)
+        
+        self.m_encoder.set_weights(self.encoder.get_weights())
+
+        _queue = np.random.normal(size=(feature_dimensions, queue_len))
+        _queue /= np.linalg.norm(_queue, axis=0)
+        self.queue = self.add_weight(
+            name='queue',
+            shape=(feature_dimensions, queue_len),
+            initializer=tf.keras.initializers.Constant(_queue),
+            trainable=False)
 
         queue_ptr = tf.zeros((1, ), dtype=tf.int32)
         self.queue_ptr = tf.Variable(queue_ptr)
         self.queue_len = queue_len
 
-        self.initialize_momentum_networks()
+        for layer in self.m_encoder.layers:
+            layer.trainable = False  
 
-        # metric function 
-        self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+        for layer in self.m_projection_head.layers:
+            layer.trainable = False        
 
-        #self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
-
-    def initialize_queue(self, feature_dims, queue_len):
-        _queue = np.random.normal(size=(feature_dims, queue_len))
-        _queue /= np.linalg.norm(_queue, axis=0)
-        self.queue = self.add_weight(
-            name='queue',
-            shape=(feature_dims, queue_len),
-            initializer=tf.keras.initializers.Constant(_queue),
-            trainable=False)
 
     def _dequeue_and_enqueue(self, keys):
         # batch size
@@ -263,13 +263,3 @@ class MoCo(tf.keras.models.Model):
                 m_weight.assign(
                     self.m * m_weight + (1 - self.m) * weight
                 )
-
-    def initialize_momentum_networks(self):
-        self.m_encoder.set_weights(self.encoder.get_weights())
-        self.m_projection_head.set_weights(self.projection_head.get_weights())
-
-        for layer in self.m_encoder.layers:
-            layer.trainable = False  
-
-        for layer in self.m_projection_head.layers:
-            layer.trainable = False  
