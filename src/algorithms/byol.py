@@ -4,7 +4,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.losses import sparse_categorical_crossentropy
 import numpy as np 
-from ..networks import contrastive_task as networks
+from src.networks import contrastive_task as networks
 
 # https://github.com/drkostas?tab=repositories
 
