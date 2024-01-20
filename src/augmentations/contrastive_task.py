@@ -10,17 +10,17 @@ from .functions import GaussianBlur, RandomResizedCrop, ColorJitter
 class Byol:
 	def __init__(self, config):
 		self.random_resized_crop = RandomResizedCrop(
-										scales=config.dataloader.get("scales"),
-										ratio=config.dataloader.get("ratio"))
+										scales=config.augmentations.get("scales"),
+										ratio=config.augmentations.get("ratio"))
 
 
 		self.color_jitter = ColorJitter(
-								brightness=config.dataloader.get('brightness'), 
-								contrast=config.dataloader.get('contrast'), 
-								saturation=config.dataloader.get('saturation'), 
-								hue=config.dataloader.get('hue'))
+								brightness=config.augmentations.get('brightness'), 
+								contrast=config.augmentations.get('contrast'), 
+								saturation=config.augmentations.get('saturation'), 
+								hue=config.augmentations.get('hue'))
 
-		self.gaussian_blur = GaussianBlur(kernel_size=config.dataloader.get('kernel_size'))
+		self.gaussian_blur = GaussianBlur(kernel_size=config.augmentations.get('kernel_size'))
 
 	def transform(self, image):
 		# random resized crop
