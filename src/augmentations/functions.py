@@ -24,9 +24,6 @@ class GaussianBlur(tf.keras.layers.Layer):
 
     def call(self, inputs):
         inputs = tf.expand_dims(inputs, axis=0)
-        # Ensure that the input has 3 channels
-        if inputs.shape[-1] != 3:
-            raise ValueError("Input must have 3 channels for RGB image.")
         
         # Apply depthwise convolution
         return tf.nn.depthwise_conv2d(inputs, self.filter, strides=[1, 1, 1, 1], padding='SAME')[0]
@@ -91,11 +88,11 @@ class ColorJitter:
 		self.contrast_vals = (max(0, 1 - contrast), 1 + contrast)
 		self.saturation_vals = (max(0, 1 - saturation), 1 + saturation)
 
-		self.hue_vals = tf.random.uniform((1, ), 0, min(hue, 0.5))
+		self.hue_vals = np.random.uniform(low = 0, high = min(hue, 0.5))
 
 	def __call__(self, image):
     	# Random color jittering (strength 0.5)
-	    color_jitter = tf.random.uniform(shape=[])
+	    color_jitter = np.random.uniform(low=0.0, high=1.0)
 	    if color_jitter < 0.8:
 	        image = tf.image.random_brightness(image,
 	        								   max_delta=self.brightness_vals[1])
@@ -109,12 +106,12 @@ class ColorJitter:
 	        								  upper=self.saturation_vals[1])
 
 	        image = tf.image.random_hue(image,
-	        						   max_delta=self.hue_vals[0])
+	        						   max_delta=self.hue_vals)
 
 	        image = tf.clip_by_value(image, 0, 255)
 
 	    # Color dropping
-	    color_drop = tf.random.uniform(shape=[])
+	    color_drop = np.random.uniform(low=0.0, high=1.0)
 	    if color_drop < 0.2:
 	        image = tf.image.rgb_to_grayscale(image)
 	        image = tf.tile(image, [1, 1, 3])

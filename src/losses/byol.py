@@ -26,8 +26,8 @@ class BYOL(tf.keras.losses.Loss):
         
 
     def call(self, prediction, target):
-        prediction = tf.math.l2_normalize(prediction, axis=1)  # (2*bs, 128)
-        target = tf.math.l2_normalize(target, axis=1)  # (2*bs, 128)
+    	prediction = tf.math.l2_normalize(prediction, axis=1)  # (2*bs, 128)
+    	target = tf.math.l2_normalize(target, axis=1)  # (2*bs, 128)
 
-        similarities = tf.reduce_sum(tf.multiply(prediction, target), axis=1)
-        return 2 - 2 * tf.reduce_mean(similarities)
+    	similarities = tf.reduce_sum(tf.multiply(prediction, target), axis=1)
+    	return 2 - 2 * tf.reduce_mean(similarities)
