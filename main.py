@@ -60,12 +60,6 @@ def main(args):
                             batch_size=args.batch_size, 
                             shuffle=args.shuffle).create_dataset()
 
-    for batch in dataloader.take(1):
-        with open("data.pickle", "wb") as f:
-            pickle.dump(batch, f)
-
-    return 
-
 
     n_image_files = len(train_image_files_path)
     steps_per_epoch = n_image_files / args.batch_size
@@ -87,7 +81,7 @@ def main(args):
     optimizer = tf.keras.optimizers.Adam()
 
     # Build the optimizer with all trainable variables
-    img_dim = config.model.get("img_shape")
+    img_dim = config.model.get("img_size")
     model.one_step(input_shape=(1, img_dim, img_dim, 3))
     all_trainable_params = model.get_all_trainable_params
     optimizer.build(all_trainable_params)
@@ -95,7 +89,7 @@ def main(args):
     ###################
     # Criterion
     ###################
-    loss = getattr(losses, config.criterion.get("type"))()
+    loss = getattr(losses, config.criterion.get("type"))(config, args.batch_size)
 
     ###################
     # CALLBACKS

@@ -5,25 +5,23 @@ config = {}
 
 model = {}
 model['img_size'] = 96 
-model['algorithm_type'] = "MOCO"
+model['algorithm_type'] = "MoCo"
 model['m'] = 0.999
 model['version'] = "v1"
 model['temp'] = 0.07
 model['queue_len'] = 65536
-model['feature_dims'] = 128  # consider a num_classes
+model['feature_dims'] = 128  # num_classes
 config['model'] = model 
 
 # model architecture names
 networks = {}
-networks['encoder_type'] = 'ResNet18'
-networks['projectionhead_type'] = 'ProjectionHead'
+networks['encoder_type'] = 'ResNet50'
 config['networks'] = networks 
-
 
 # dataloader
 dataloader = {}
 dataloader['type'] = 'Common'
-dataloader['augmentations_type'] = 'MOCOV1'
+dataloader['augmentations_type'] = 'MoCoV1'
 config['dataloader'] = dataloader
 
 # optimizer

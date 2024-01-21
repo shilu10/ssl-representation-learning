@@ -238,10 +238,11 @@ class BYOL(tf.keras.models.Model):
         x = self(inputs)
         x = self.q_online(x)
 
+    @staticmethod
     def get_all_trainable_params(self):
-        f_online_params = self.f_online.trainable_weights
-        g_online_params = self.g_online.trainable_weights
-        q_online_params = self.q_online.trainable_weights
+        f_online_params = self.f_online.trainable_variables
+        g_online_params = self.g_online.trainable_variables
+        q_online_params = self.q_online.trainable_variables
 
         all_online_params = f_online_params + g_online_params + q_online_params
 
