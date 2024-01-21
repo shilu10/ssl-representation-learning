@@ -7,12 +7,24 @@ import numpy as np
 from src.networks import contrastive_task as networks
 
 
+
+def _dense(**custom_kwargs):
+    def _func(*args, **kwargs):
+        kwargs.update(**custom_kwargs)
+        return Dense(*args, **kwargs)
+    return _func
+
+
 class MoCo(tf.keras.models.Model):
     """Momentum Contrastive Feature Learning"""
     def __init__(self, config, **kwargs):
 
         super(MoCo, self).__init__(dynamic=True)
         self.config = config 
+
+        DEFAULT_ARGS = {
+            "use_bias": True,
+            "kernel_regularizer": tf.keras.regularizers.l2()}
 
         self.m = config.model.get("m")
         self.version = config.model.get("version")
@@ -21,17 +33,27 @@ class MoCo(tf.keras.models.Model):
         self.feature_dims = config.model.get("feature_dims")   # num_classes 
         self.queue_len = config,model.get("queue_len")         # dictionary len
 
-        # encoder and projection head
-        self.encoder = getattr(networks, config.network.get("encoder_type")) 
-        self.encoder = encoder(data_format="channels_last", pooling=True,
-                            trainable=True, include_top=True, classes=self.feature_dims)
+        def set_encoder(name):
+            img_size = self.config.img_size
+            backbone = getattr(networks, config.network.get("encoder_type"))(
+                include_top=False,
+                data_format="channels_last",
+                input_shape=(img_size, img_size, 3),
+                pooling='avg')
+            
+            x = backbone.output
+            x = _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc1')(x)
 
-        if self.version == "v2":
-            self.projection_head = getattr(networks, config.network.get("projection_head")) 
+            if config.model.get("version") == "v2":
+                x = tf.keras.layers.Activation('relu', name='proj_relu1')(x)
+                x = _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc2')(x)
 
-        # the momentum networks are initialized from their online counterparts
-        self.m_encoder = tf.keras.models.clone_model(self.encoder)
-        self.m_projection_head = tf.keras.models.clone_model(self.projection_head)
+            encoder = tf.keras.models.Model(backbone.input, x, name=name)
+            return encoder
+
+        # encoder q and k
+        self.encoder_q = set_encoder(name="query_encoder")
+        self.encoder_k = set_encoder(name="key_encoder")
 
         self.initialize_queue(feature_dims, queue_len)
 
@@ -47,7 +69,7 @@ class MoCo(tf.keras.models.Model):
         #self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
 
     def call(self, inputs):
-        outputs = self.encoder(inputs)
+        outputs = self.encoder_q(inputs)
 
         return outputs
 
@@ -134,35 +156,28 @@ class MoCo(tf.keras.models.Model):
 
         batch_size = x_q.shape[0]
 
+        # shuffling the batch before encoding(key)
+        im_k, idx_unshuffle = self.batch_shuffle(x_k)
+        key_feat = self.encoder_k(im_k, training=False)
+        key_feat = tf.cast(key_feat, dtype=tf.float32)
+        key_feat = tf.math.l2_normalize(key_feat, axis=1)  # NxC
+
+        # unshuffling the batch after encoding(key)
+        key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
+
         with tf.GradientTape() as tape:
             # embedding representation
-            q_feat = self.encoder(x_q)
-
-            if self.version == 'mocov2':
-                q_feat = self.projection_head(q_feat)
+            q_feat = self.encoder_q(x_q, training=True)
+            q_feat = tf.cast(q_feat, dtype=tf.float32)
             q_feat = tf.math.l2_normalize(q_feat, axis=1)
 
-            # shuffling the batch before encoding(key)
-            im_k, idx_unshuffle = self.batch_shuffle(x_k)
-            key_feat = self.m_encoder(im_k)
-            if self.version == 'mocov2':
-                key_feat = self.m_projection_head(key_feat)
-            key_feat = tf.math.l2_normalize(key_feat, axis=1)  # NxC
-
-            # unshuffling the batch after encoding(key)
-            key_feat = self.batch_unshuffle(key_feat, idx_unshuffle)
-
             # infonce loss
-            loss, labels, logits = self.con_loss(q_feat, key_feat, batch_size)
+            loss, labels, logits = self.loss(q_feat, key_feat, batch_size)
 
         # dequeue and enqueue
         self._dequeue_and_enqueue(key_feat)
 
-        encoder_params, projection_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
-
-        trainable_params = encoder_params #+ projection_head_params
-        if self.version == 'mocov2':
-            trainable_params = encoder_params + projection_head_params
+        trainable_params = self.encoder_q.trainable_weights #+ projection_head_params
 
         grads = tape.gradient(loss, trainable_params)
 
@@ -256,38 +271,25 @@ class MoCo(tf.keras.models.Model):
 
         self.m_encoder.set_weights(mom_encoder_weights)
         """
-        for weight, m_weight in zip(self.encoder.weights, self.m_encoder.weights):
-            m_weight.assign(
-                self.m * m_weight + (1 - self.m) * weight
-            )
+        encoder_q_weights = self.encoder_q.get_weights()
+        encoder_k_weights = self.encoder_k.get_weights()
 
-        if self.version == 'mocov2':
-
-            for weight, m_weight in zip(
-                self.projection_head.weights, self.m_projection_head.weights
-            ):
-                m_weight.assign(
-                    self.m * m_weight + (1 - self.m) * weight
-                )
+        for i in range(len(encoder_q_weights)):
+            encoder_k_weights[i] = self.m * encoder_k_weights[i] + (1 - self.m) * encoder_q_weights[i]
+        
+        self.encoder_k.set_weights(encoder_k_weights)
 
     def initialize_momentum_networks(self):
-        self.m_encoder.set_weights(self.encoder.get_weights())
-        self.m_projection_head.set_weights(self.projection_head.get_weights())
+        self.encoder_k.set_weights(self.encoder_q.get_weights())
 
-        for layer in self.m_encoder.layers:
-            layer.trainable = False  
-
-        for layer in self.m_projection_head.layers:
-            layer.trainable = False  
+        self.encoder_k.trainable = False 
 
     def one_step(self, input_shape):
-        inputs = tf.zeros(shape, dtype=tf.float32)
+        inputs = tf.zeros(input_shape, dtype=tf.float32)
 
-        x = self.encoder(inputs)
-        x = self.projection_head(x)
+        x = self.encoder_q(inputs)
 
     def get_all_trainable_params(self):
-        encoder_params = self.encoder.get_weights()
-        projection_head_params = self.projection_head.get_weights()
-
-        return encoder_params + projection_head_params
+        encoder_q_params = self.encoder_q.get_weights()
+        
+        return encoder_q_params
