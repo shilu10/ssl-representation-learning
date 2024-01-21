@@ -21,7 +21,7 @@ Adapted from tf.keras.applications.ResNet50. A notable difference is that the
 model here outputs logits while the Keras model outputs probability.
 """
 
-from .common import _ConvBlock, _IdentityBlock
+from .common import identity_block, conv_block
 import tensorflow as tf 
 from tensorflow import keras 
 import numpy as np 

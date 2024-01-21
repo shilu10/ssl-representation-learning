@@ -7,7 +7,7 @@ class BYOL(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
         [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config, batch_size, *args, **kwargs):
         """ 
             Calculates the contrastive loss of the input data using NT_Xent. The
             equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
@@ -23,7 +23,8 @@ class BYOL(tf.keras.losses.Loss):
                 loss: The complete NT_Xent constrastive loss
         """
         super(BYOL, self).__init__(*args, **kwargs)
-        
+        self.config = config 
+        self.batch_size = batch_size
 
     def call(self, prediction, target):
     	prediction = tf.math.l2_normalize(prediction, axis=1)  # (2*bs, 128)

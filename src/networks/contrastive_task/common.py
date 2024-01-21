@@ -7,7 +7,7 @@ from tensorflow import keras
 layers = tf.keras.layers
 
 
-cdef identity_block(input_tensor, kernel_size, filters, stage, block, data_format="channels_last"):
+def identity_block(input_tensor, kernel_size, filters, stage, block, data_format="channels_last"):
     """The identity block is the block that has no conv layer at shortcut.
 
     # Arguments

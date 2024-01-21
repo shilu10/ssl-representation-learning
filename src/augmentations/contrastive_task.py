@@ -43,7 +43,7 @@ class BYOL:
 		return image 
 
 
-class MOCOV1:
+class MoCoV1:
 	def __init__(self, config):
 		self.random_resized_crop = RandomResizedCrop(
 										scales=config.augmentations.get("scales"),

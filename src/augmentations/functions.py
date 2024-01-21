@@ -90,11 +90,12 @@ class ColorJitter:
 		self.saturation_vals = (max(0, 1 - saturation), 1 + saturation)
 
 		self.hue_vals = np.random.uniform(low = 0, high = min(hue, 0.5))
+		self.p = p 
 
 	def __call__(self, image):
     	# Random color jittering (strength 0.5)
 	    color_jitter = np.random.uniform(low=0.0, high=1.0)
-	    if color_jitter < p:
+	    if color_jitter < self.p:
 	        image = tf.image.random_brightness(image,
 	        								   max_delta=self.brightness_vals[1])
 

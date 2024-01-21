@@ -11,7 +11,7 @@ from src.networks import contrastive_task as networks
 def _dense(**custom_kwargs):
     def _func(*args, **kwargs):
         kwargs.update(**custom_kwargs)
-        return Dense(*args, **kwargs)
+        return tf.keras.layers.Dense(*args, **kwargs)
     return _func
 
 
@@ -31,11 +31,11 @@ class MoCo(tf.keras.models.Model):
         self.temp = config.model.get("temp")
 
         self.feature_dims = config.model.get("feature_dims")   # num_classes 
-        self.queue_len = config,model.get("queue_len")         # dictionary len
+        self.queue_len = config.model.get("queue_len")         # dictionary len
 
         def set_encoder(name):
-            img_size = self.config.img_size
-            backbone = getattr(networks, config.network.get("encoder_type"))(
+            img_size = self.config.model.get("img_size")
+            backbone = getattr(networks, config.networks.get("encoder_type"))(
                 include_top=False,
                 data_format="channels_last",
                 input_shape=(img_size, img_size, 3),
@@ -55,7 +55,7 @@ class MoCo(tf.keras.models.Model):
         self.encoder_q = set_encoder(name="query_encoder")
         self.encoder_k = set_encoder(name="key_encoder")
 
-        self.initialize_queue(feature_dims, queue_len)
+        self.initialize_queue(self.feature_dims, self.queue_len)
 
         queue_ptr = tf.zeros((1, ), dtype=tf.int32)
         self.queue_ptr = tf.Variable(queue_ptr)
@@ -172,7 +172,7 @@ class MoCo(tf.keras.models.Model):
             q_feat = tf.math.l2_normalize(q_feat, axis=1)
 
             # infonce loss
-            loss, labels, logits = self.loss(q_feat, key_feat, batch_size)
+            loss, labels, logits = self.loss(q_feat, key_feat, self.queue)
 
         # dequeue and enqueue
         self._dequeue_and_enqueue(key_feat)
@@ -289,7 +289,8 @@ class MoCo(tf.keras.models.Model):
 
         x = self.encoder_q(inputs)
 
+    @staticmethod
     def get_all_trainable_params(self):
-        encoder_q_params = self.encoder_q.get_weights()
+        encoder_q_params = self.encoder_q.trainable_variables
         
         return encoder_q_params
