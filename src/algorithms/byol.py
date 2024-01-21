@@ -233,7 +233,7 @@ class BYOL(tf.keras.models.Model):
         self.g_target.set_weights(g_target_weights)
 
     def one_step(self, input_shape):
-        inputs = tf.zeros(input_shape)
+        inputs = tf.zeros(input_shape, dtype=tf.float32)
 
         x = self(inputs)
         x = self.q_online(x)

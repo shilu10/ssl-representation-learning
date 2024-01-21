@@ -7,7 +7,7 @@ class InfoNCE(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
         [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
     """
-    def __init__(self, temp=0.07, batch_size=32, **kwargs):
+    def __init__(self, config, **kwargs):
         """ 
             Calculates the contrastive loss of the input data using NT_Xent. The
             equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
@@ -23,13 +23,14 @@ class InfoNCE(tf.keras.losses.Loss):
                 loss: The complete NT_Xent constrastive loss
         """
         super(InfoNCE, self).__init__(**kwargs)
-        self.temp = temp
-        self.batch_size = batch_size
+
+        self.temp = config.model.get("temp")
+        self.batch_size = config.model.get("batch_size")
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
 
     def __call__(self, q_feat, key_feat, queue):
         # calculating the positive similarities
-        l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
+        l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, tf.stop_gradient(key_feat)), (-1, 1))  # nx1
 
         # calculating the negative similarites
         l_neg = tf.einsum('nc,ck->nk', q_feat, queue)  # nxK
