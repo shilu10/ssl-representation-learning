@@ -82,7 +82,8 @@ class ColorJitter:
 				brightness: float,
 				contrast: float, 
 				saturation: float, 
-				hue: float):
+				hue: float, 
+				p: float):
 
 		self.brightness_vals = (max(0, 1 - brightness), 1 + brightness)
 		self.contrast_vals = (max(0, 1 - contrast), 1 + contrast)
@@ -93,7 +94,7 @@ class ColorJitter:
 	def __call__(self, image):
     	# Random color jittering (strength 0.5)
 	    color_jitter = np.random.uniform(low=0.0, high=1.0)
-	    if color_jitter < 0.8:
+	    if color_jitter < p:
 	        image = tf.image.random_brightness(image,
 	        								   max_delta=self.brightness_vals[1])
 
@@ -110,10 +111,19 @@ class ColorJitter:
 
 	        image = tf.clip_by_value(image, 0, 255)
 
-	    # Color dropping
+	    return image
+
+
+class GrayScale:
+
+	def __init__(self, p=0.2):
+		self.p = p 
+
+	def __call__(self, image):
+		# Color dropping
 	    color_drop = np.random.uniform(low=0.0, high=1.0)
-	    if color_drop < 0.2:
+	    if color_drop < self.p:
 	        image = tf.image.rgb_to_grayscale(image)
 	        image = tf.tile(image, [1, 1, 3])
 
-	    return image
+	    return image 
