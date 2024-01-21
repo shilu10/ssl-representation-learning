@@ -17,15 +17,17 @@ class MoCo(tf.keras.models.Model):
         self.m = config.model.get("m")
         self.version = config.model.get("version")
         self.temp = config.model.get("temp")
-        
-        feature_dims = config.model.get("feature_dims")
-        self.feature_dims = feature_dims
-        queue_len = config,model.get("queue_len")
-        self.queue_len = queue_len
+
+        self.feature_dims = config.model.get("feature_dims")   # num_classes 
+        self.queue_len = config,model.get("queue_len")         # dictionary len
 
         # encoder and projection head
         self.encoder = getattr(networks, config.network.get("encoder_type")) 
-        self.projection_head = getattr(networks, config.network.get("projection_head")) 
+        self.encoder = encoder(data_format="channels_last", pooling=True,
+                            trainable=True, include_top=True, classes=self.feature_dims)
+
+        if self.version == "v2":
+            self.projection_head = getattr(networks, config.network.get("projection_head")) 
 
         # the momentum networks are initialized from their online counterparts
         self.m_encoder = tf.keras.models.clone_model(self.encoder)
@@ -35,7 +37,6 @@ class MoCo(tf.keras.models.Model):
 
         queue_ptr = tf.zeros((1, ), dtype=tf.int32)
         self.queue_ptr = tf.Variable(queue_ptr)
-        self.queue_len = queue_len
 
         self.initialize_momentum_networks()
 
@@ -44,6 +45,11 @@ class MoCo(tf.keras.models.Model):
         self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
         #self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
+
+    def call(self, inputs):
+        outputs = self.encoder(inputs)
+
+        return outputs
 
     def initialize_queue(self, feature_dims, queue_len):
         _queue = np.random.normal(size=(feature_dims, queue_len))
@@ -123,8 +129,8 @@ class MoCo(tf.keras.models.Model):
 
     def train_step(self, inputs):
         
-        x_q = inputs['query']
-        x_k = inputs['key']
+        x_q = inputs[0]
+        x_k = inputs[0]
 
         batch_size = x_q.shape[0]
 
@@ -273,3 +279,15 @@ class MoCo(tf.keras.models.Model):
 
         for layer in self.m_projection_head.layers:
             layer.trainable = False  
+
+    def one_step(self, input_shape):
+        inputs = tf.zeros(shape, dtype=tf.float32)
+
+        x = self.encoder(inputs)
+        x = self.projection_head(x)
+
+    def get_all_trainable_params(self):
+        encoder_params = self.encoder.get_weights()
+        projection_head_params = self.projection_head.get_weights()
+
+        return encoder_params + projection_head_params
