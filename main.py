@@ -84,6 +84,7 @@ def main(args):
     img_dim = config.model.get("img_size")
     model.one_step(input_shape=(1, img_dim, img_dim, 3))
     all_trainable_params = model.get_all_trainable_params
+    print(all_trainable_params)
     optimizer.build(all_trainable_params)
 
     ###################

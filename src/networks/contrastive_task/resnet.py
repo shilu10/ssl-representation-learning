@@ -18,9 +18,9 @@ ModelParams = collections.namedtuple(
 # -------------------------------------------------------------------------
 #   Residual Model Builder
 # -------------------------------------------------------------------------
-
+#https://github.com/qubvel/classification_models/blob/master/classification_models/models/resnet.py
 def ResNet(model_params, input_shape=None, input_tensor=None, include_top=True,
-           classes=1000, **kwargs):
+           classes=1000, pooling=None, **kwargs):
     """Instantiates the ResNet, SEResNet architecture.
     Optionally loads weights pre-trained on ImageNet.
     Note that the data format convention used by the model is
@@ -108,7 +108,17 @@ def ResNet(model_params, input_shape=None, input_tensor=None, include_top=True,
     if include_top:
         x = layers.GlobalAveragePooling2D(name='pool1')(x)
         x = layers.Dense(classes, name='fc1')(x)
-        x = layers.Activation('softmax', name='softmax')(x)
+        #x = layers.Activation('softmax', name='softmax')(x)
+
+    elif pooling:
+    	if pooling == "avg":
+    		x = layers.GlobalAveragePooling2D(name="avg_pool")(x)
+
+    	elif pooling == "max":
+    		x = layers.GlobalMaxPooling2D(name="max_pool")(x)
+
+    else:
+    	x = x 
 
     # Ensure that the model takes into account any potential predecessors of `input_tensor`.
     if input_tensor is not None:

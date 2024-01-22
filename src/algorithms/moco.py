@@ -37,7 +37,6 @@ class MoCo(ContrastiveLearning):
             img_size = self.config.model.get("img_size")
             backbone = getattr(networks, config.networks.get("encoder_type"))(
                 include_top=False,
-                data_format="channels_last",
                 input_shape=(img_size, img_size, 3),
                 pooling='avg')
             
@@ -62,10 +61,7 @@ class MoCo(ContrastiveLearning):
 
         self.initialize_momentum_networks()
 
-        # metric function 
-        self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-
+        
         #self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
 
     def call(self, inputs):
@@ -252,7 +248,7 @@ class MoCo(ContrastiveLearning):
 
         x = self.encoder_q(inputs)
 
-    @staticmethod
+    @property
     def get_all_trainable_params(self):
         encoder_q_params = self.encoder_q.trainable_variables
         

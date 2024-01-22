@@ -201,7 +201,7 @@ class BYOL(ContrastiveLearning):
         x = self(inputs)
         x = self.q_online(x)
 
-    @staticmethod
+    @property
     def get_all_trainable_params(self):
         f_online_params = self.f_online.trainable_variables
         g_online_params = self.g_online.trainable_variables
