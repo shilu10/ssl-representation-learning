@@ -4,8 +4,11 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.losses import sparse_categorical_crossentropy
 import numpy as np 
-from utils import _cosine_simililarity_dim1 as sim_func_dim1, _cosine_simililarity_dim2 as sim_func_dim2
-from utils import get_negative_mask
+from src.utils.contrastive_task import _cosine_simililarity_dim1 as sim_func_dim1, _cosine_simililarity_dim2 as sim_func_dim2
+from src.utils.contrastive_task import get_negative_mask
+from src.networks import contrastive_task as networks
+from .common import ContrastiveLearning
+from .utils import _dense, _conv2d
 
 
 # https://github.com/drkostas?tab=repositories
@@ -14,25 +17,12 @@ from utils import get_negative_mask
 Linear probing accuracy: linear probing is a popular metric to evaluate self-supervised classifiers. It is computed as the accuracy of a logistic regression classifier trained on top of the encoder's features. In our case, this is done by training a single dense layer on top of the frozen encoder. Note that contrary to traditional approach where the classifier is trained after the pretraining phase, in this example we train it during pretraining. This might slightly decrease its accuracy, but that way we can monitor its value during training, which helps with experimentation and debugging.
 '''
 
-def _conv2d(**custom_kwargs):
-    def _func(*args, **kwargs):
-        kwargs.update(**custom_kwargs)
-        return Conv2D(*args, **kwargs)
-    return _func
-
-
-def _dense(**custom_kwargs):
-    def _func(*args, **kwargs):
-        kwargs.update(**custom_kwargs)
-        return Dense(*args, **kwargs)
-    return _func
-
-
-class SimCLR(tf.keras.models.Model):
+class SimCLR(ContrastiveLearning):
     
     def __init__(self, config, *args, **kwargs):
         super(SimCLR, self).__init__(dynamic=True, *args, **kwargs)
-        self.feature_dims = config.model.get("feature_dims")
+        hidden_dims = config.model.get("hidden_dims")
+        projection_dims = config.model.get("projection_dims")
 
         img_size = config.model.get("img_size")
         self.encoder = getattr(networks, config.networks.get("encoder_type"))(
@@ -45,12 +35,11 @@ class SimCLR(tf.keras.models.Model):
             "kernel_regularizer": tf.keras.regularizers.l2()}
 
         self.projection_head = tf.keras.models.Sequential([
-                _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc1'), 
+                _dense(**DEFAULT_ARGS)(hidden_dims, name='proj_fc1'), 
                 tf.keras.layers.Activation("relu"),
-                 _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc2'),
+                 _dense(**DEFAULT_ARGS)(projection_dims, name='proj_fc2'),
             ])
 
-         
     def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
         self.optimizer = optimizer
@@ -65,8 +54,8 @@ class SimCLR(tf.keras.models.Model):
 
     def train_step(self, inputs):
   
-        xi = inputs['query']
-        xj = inputs['key']
+        xi = inputs[0]
+        xj = inputs[1]
 
         batch_size = xi.shape[0]
 
@@ -83,7 +72,7 @@ class SimCLR(tf.keras.models.Model):
             zi = tf.math.l2_normalize(zi, axis=1)
             zj = tf.math.l2_normalize(zj, axis=1)
 
-            loss, labels, logits = self.loss(zi, zj, batch_size)
+            loss, labels, logits = self.loss(zi, zj)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
         trainable_params = encoder_params + proj_head_params
@@ -142,40 +131,6 @@ class SimCLR(tf.keras.models.Model):
 
         self.probe_accuracy.update_state(labels, class_logits)
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
-
-    def _loss(self, zis, zjs, batch_size):
-        
-        # calculate the positive samples similarities
-        l_pos = sim_func_dim1(zis, zjs)
-        negative_mask = get_negative_mask(batch_size)
-
-        l_pos = tf.reshape(l_pos, (batch_size, 1))
-        l_pos /= 0.07
-        assert l_pos.shape == (batch_size, 1), "l_pos shape not valid" + str(l_pos.shape)  # [N,1]
-
-        # combine all the zis and zijs and consider as negatives 
-        negatives = tf.concat([zjs, zis], axis=0)
-
-        loss = 0
-        for positives in [zis, zjs]:
-            l_neg = sim_func_dim2(positives, negatives)
-
-            labels = tf.zeros(batch_size, dtype=tf.int64)
-
-            l_neg = tf.boolean_mask(l_neg, negative_mask)
-            l_neg = tf.reshape(l_neg, (batch_size, -1))
-            l_neg /= 0.07
-
-            assert l_neg.shape == (
-                 batch_size, 2 * (batch_size - 1)), "Shape of negatives not expected." + str(
-                 l_neg.shape)
-
-            logits = tf.concat([l_pos, l_neg], axis=1)  # [N, K+1]
-            loss += self.criterion(y_pred=logits, y_true=labels)
-        
-        loss = loss / (2 * batch_size)
-
-        return loss, labels, logits
 
     def one_step(self, input_shape):
         inputs = tf.zeros(input_shape)

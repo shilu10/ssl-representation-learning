@@ -5,14 +5,9 @@ import tensorflow.keras.backend as K
 from tensorflow.keras.losses import sparse_categorical_crossentropy
 import numpy as np 
 from src.networks import contrastive_task as networks
-from .common import ContrastiveLearning
+from .common import ContrastiveLearning, _dense, _conv2d
+from .utils import _dense, _conv2d
 
-
-def _dense(**custom_kwargs):
-    def _func(*args, **kwargs):
-        kwargs.update(**custom_kwargs)
-        return tf.keras.layers.Dense(*args, **kwargs)
-    return _func
 
 
 class MoCo(ContrastiveLearning):
@@ -30,22 +25,23 @@ class MoCo(ContrastiveLearning):
         self.version = config.model.get("version")
         self.temp = config.model.get("temp")
 
-        self.feature_dims = config.model.get("feature_dims")   # num_classes 
+        self.hidden_dims = config.model.get("hidden_dims")
+        self.projection_dims = config.model.get("projection_dims")   # num_classes 
         self.queue_len = config.model.get("queue_len")         # dictionary len
 
         def set_encoder(name):
             img_size = self.config.model.get("img_size")
             backbone = getattr(networks, config.networks.get("encoder_type"))(
-                include_top=False,
+                include_top=True,
                 input_shape=(img_size, img_size, 3),
                 pooling='avg')
             
             x = backbone.output
-            x = _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc1')(x)
+            x = _dense(**DEFAULT_ARGS)(self.hidden_dims, name='proj_fc1')(x)
 
             if config.model.get("version") == "v2":
                 x = tf.keras.layers.Activation('relu', name='proj_relu1')(x)
-                x = _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc2')(x)
+                x = _dense(**DEFAULT_ARGS)(self.projection_dims, name='proj_fc2')(x)
 
             encoder = tf.keras.models.Model(backbone.input, x, name=name)
             return encoder
@@ -54,27 +50,24 @@ class MoCo(ContrastiveLearning):
         self.encoder_q = set_encoder(name="query_encoder")
         self.encoder_k = set_encoder(name="key_encoder")
 
-        self.initialize_queue(self.feature_dims, self.queue_len)
+        self.initialize_queue(self.projection_dims, self.queue_len)
 
         queue_ptr = tf.zeros((1, ), dtype=tf.int32)
         self.queue_ptr = tf.Variable(queue_ptr)
 
         self.initialize_momentum_networks()
 
-        
-        #self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) 
-
     def call(self, inputs):
         outputs = self.encoder_q(inputs)
 
         return outputs
 
-    def initialize_queue(self, feature_dims, queue_len):
-        _queue = np.random.normal(size=(feature_dims, queue_len))
+    def initialize_queue(self, projection_dims, queue_len):
+        _queue = np.random.normal(size=(projection_dims, queue_len))
         _queue /= np.linalg.norm(_queue, axis=0)
         self.queue = self.add_weight(
             name='queue',
-            shape=(feature_dims, queue_len),
+            shape=(projection_dims, queue_len),
             initializer=tf.keras.initializers.Constant(_queue),
             trainable=False)
 
@@ -192,26 +185,6 @@ class MoCo(ContrastiveLearning):
 
         self.probe_accuracy.update_state(labels, class_logits)
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
-
-
-    def con_loss(self, q_feat, key_feat, batch_size):
-        # calculating the positive similarities
-        l_pos = tf.reshape(tf.einsum('nc,nc->n', q_feat, key_feat), (-1, 1))  # nx1
-
-        # calculating the negative similarites
-        l_neg = tf.einsum('nc,ck->nk', q_feat, self.queue)  # nxK
-        
-        # combining l_pos and l_neg for logits
-        logits = tf.concat([l_pos, l_neg], axis=1)  # nx(1+k)
-        logits /= self.temp 
-
-        # pseduo labels
-        labels = tf.zeros(batch_size, dtype=tf.int64)  # n
-
-        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
-        loss = tf.reduce_mean(loss, name='xentropy-loss')
-
-        return loss, labels, logits
 
     def _momentum_update_key_encoder(self):
         """
