@@ -3,7 +3,7 @@ from tensorflow import keras
 import numpy as np 
 import os, sys, shutil 
 import imutils, random 
-from src.augmentations import contrastive_task as augments
+from src.transforms import contrastive_task as transforms
 
 
 class Common:
@@ -22,11 +22,14 @@ class Common:
 		return image 
 
 	def __augment(self, image):
-		augmenter = getattr(augments, self.config.dataloader.get("augmentations_type"))
+		augmenter = getattr(transforms, self.config.dataloader.get("transform_type"))
 		augmenter = augmenter(self.config)
 
 		view1 = augmenter.transform(image)
 		view2 = augmenter.transform(image)
+
+		view1 /= 255.0
+		view2 /= 255.0
 
 		#inputs = {"inputs": (view1, view2)}
 

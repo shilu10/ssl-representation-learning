@@ -22,7 +22,7 @@ config['networks'] = networks
 # dataloader
 dataloader = {}
 dataloader['type'] = 'Common'
-dataloader['augmentations_type'] = 'BYOL'
+dataloader['transform_type'] = 'BYOL'
 config['dataloader'] = dataloader
 
 # optimizer
@@ -39,15 +39,15 @@ config['criterion'] = criterion
 
 
 # pretext type specific args
-augmentations = {}
-augmentations['scales'] = (0.08, 1.0)
-augmentations['ratio'] = (0.75, 1.3333333333333333)
-augmentations['brightness'] = 0.8
-augmentations['contrast'] = 0.8 
-augmentations['saturation'] = 0.8
-augmentations['hue'] = 0.2
-augmentations['color_jitter_prob'] = 0.8    # random apply prob
-augmentations['grayscale_prob'] = 0.2 		# ranodm apply prob
-augmentations['kernel_size'] = int(96 * 0.1)
+transformations = {}
+transformations['scales'] = (0.08, 1.0)
+transformations['ratio'] = (0.75, 1.3333333333333333)
+transformations['brightness'] = 0.8
+transformations['contrast'] = 0.8 
+transformations['saturation'] = 0.8
+transformations['hue'] = 0.2
+transformations['color_jitter_prob'] = 0.8    # random apply prob
+transformations['grayscale_prob'] = 0.2 		# ranodm apply prob
+transformations['kernel_size'] = int(96 * 0.1)
 
-config['augmentations'] = augmentations
+config['transformations'] = transformations

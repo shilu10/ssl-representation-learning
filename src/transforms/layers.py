@@ -200,3 +200,34 @@ class RandomColorJitter(layers.Layer):
                 for color_augmentation in random.sample(self.color_augmentations, 4):
                     images = color_augmentation(images)
         return images
+
+
+# pirl 
+
+mean_std = [[0.485, 0.456, 0.406],
+            [0.229, 0.224, 0.225]]
+
+
+def jigsaw(img):
+    mean, std = mean_std
+    img = tf.cast(img, tf.float32)
+    img /= 255.
+    #img -= mean
+    #img /= std
+
+    copy_img = tf.image.resize(img, (225, 225), method='bilinear')
+
+    imgclips = []
+    for i in range(3):
+        for j in range(3):
+            clip = copy_img[i * 75: (i + 1) * 75, j * 75: (j + 1) * 75, :]
+            randomx = tf.experimental.numpy.random.randint(0, 10)
+            randomy = tf.experimental.numpy.random.randint(0, 10)
+            clip = clip[randomx: randomx+64, randomy:randomy+64, :]
+
+            imgclips.append(clip)
+
+    imgclips = tf.convert_to_tensor(imgclips)
+    imgclips = tf.random.shuffle(imgclips)
+
+    return img, imgclips

@@ -7,9 +7,9 @@ import numpy as np
 from src.utils.contrastive_task import _cosine_simililarity_dim1 as sim_func_dim1, _cosine_simililarity_dim2 as sim_func_dim2
 from src.utils.contrastive_task import get_negative_mask
 from src.networks import contrastive_task as networks
+from src import init_memory_bank 
 from .common import ContrastiveLearning
 from .utils import _dense, _conv2d
-
 
 
 class PIRL(ContrastiveLearning):
@@ -19,15 +19,17 @@ class PIRL(ContrastiveLearning):
         super(PIRL, self).__init__(dynamic=True, *args, **kwargs)
         self.config = config
         img_size = config.model.get('img_size')
-        self.temp = config.model.get('temp')    # 0.07
-
-        self.memory_bank = memory_bank
-        self.pretext_task = pretext_task
+        self.projection_dims = config.model.get("projection_dims")
+        self.pretext_task_type = config.model.get("pretext_task_type")
         
         self.encoder = getattr(networks, config.networks.get("encoder_type"))(
                 include_top=True,
                 input_shape=(img_size, img_size, 3),
                 pooling='avg')
+
+        self.f = getattr(networks, config.networks.get("generic_type"))(self.projection_dims)
+
+        self.g = getattr(networks, config.networks.get("transformed_type"))(self.projection_dims)
 
     def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
@@ -36,14 +38,11 @@ class PIRL(ContrastiveLearning):
         self.acc_metrics = metrics
 
     def train_step(self, inputs):
-        data, indices = inputs
-        
-        original = data['original']
-        transformed = data['transformed']
+        indices, original, transformed = inputs
 
         batch_size = original.shape[0]
 
-        if self.pretext_task == "jigsaw":
+        if self.pretext_task_type == "jigsaw":
             transformed = tf.concat([*transformed], axis=0)
 
         with tf.GradientTape() as tape:
@@ -58,8 +57,8 @@ class PIRL(ContrastiveLearning):
             mem_repr = self.memory_bank.sample_by_indices(indices)
             mem_arr = self.memory_bank.sample_negatives(indices, 1000)
 
-            loss_1 = self.nce_loss(mem_repr, transformed_image_feats, mem_arr, self.temp)
-            loss_2 = self.nce_loss(mem_repr, original_image_feats, mem_arr, self.temp)
+            loss_1 = self.loss(mem_repr, transformed_image_feats, mem_arr)
+            loss_2 = self.loss(mem_repr, original_image_feats, mem_arr)
 
             loss =  tf.reduce_mean(0.5 * loss_1 + (1 - 0.5) * loss_2)
 
@@ -126,6 +125,14 @@ class PIRL(ContrastiveLearning):
         self.probe_accuracy.update_state(labels, class_logits)
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
 
+    def initialize_memory_bank(self):
+        self.memory_bank = init_memory_bank.main(self.config)
+
+    def one_step(self, input_shape):
+        pass 
+
+    def get_all_trainable_params(self):
+        pass 
 
     def get_img_pair_probs(self, vi_batch, vi_t_batch, mn_arr, temp_parameter):
         """

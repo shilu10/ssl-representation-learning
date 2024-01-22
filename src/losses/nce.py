@@ -3,27 +3,37 @@ from tensorflow import keras
 import numpy as np 
 
 
+
 class NCE(tf.keras.losses.Loss):
-    def __init__(self, t, **kwargs):
+    def __init__(self, config, batch_size, **kwargs):
         super(NCE, self).__init__(**kwargs)
-        self.t = t 
-        self.cross_entropy = tf.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
-        self.cosine_similarity_dim1 = tf.keras.losses.CosineSimilarity(reduction=tf.losses.Reduction.NONE, axis=1)
-        self.cosine_similarity_dim2 = tf.keras.losses.CosineSimilarity(reduction=tf.losses.Reduction.NONE, axis=2)
+        self.config = config 
+        self.temp = config.criterion.get("temp")
+        self.batch_size = batch_size
+        
 
-    def call(self, vis, negatives):
-        f_vi, g_vit = vis 
-
+    def call(self, f_vi, g_vit, negatives):
         assert f_vi.shape == g_vit.shape, "Shapes do not match" + str(f_vi.shape) + ' != ' + str(g_vit.shape)
+        #  predicted input values of 0 and 1 are undefined (hence the clip by value)
 
-        l_pos = tf.expand_dims(sim_func_dim1(f_vi, g_vit), 1)
-        l_pos /= self.t
+        batch_size = f_vi.shape[0]
+        return self.n_way_softmax(f_vi, g_vit, negatives) - tf.math.log(
+            1 - tf.math.exp(-self.n_way_softmax(g_vit, negatives[:batch_size, :], negatives)))
 
-        l_neg = sim_func_dim2(tf.expand_dims(v_it, axis=1), tf.expand_dims(negatives, axis=0))
-        l_neg /= self.t
 
-        logits = tf.concat([l_pos, l_neg], axis=1)
-        labels = tf.zeros(v_i.shape[0], dtype=tf.int32)
+    def n_way_softmax(self, vi_feat, vit_feat, mem_feat):
+    
+        pos_sim = tf.reshape(tf.einsum('nc,nc->n', vi_feat, vit_feat), (-1, 1))  # nx1 
+        pos_sim /= self.temp
 
-        h_loss = cross_entropy(y_true=labels, y_pred=logits)
-        return h_loss
+        neg_sim = tf.einsum('nc,ck->nk', vit_feat, tf.transpose(mem_feat))  # nxK
+        neg_sim /= self.temp
+
+        logits = tf.concat([pos_sim, neg_sim], axis=1)
+
+        labels = tf.zeros(self.batch_size, dtype=tf.int32)
+
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+        loss = tf.reduce_mean(loss, name='nce-loss')
+
+        return loss

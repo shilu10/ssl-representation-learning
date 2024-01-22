@@ -37,16 +37,16 @@ config['criterion'] = criterion
 
 # pretext type specific args
 s = 1
-augmentations = {}
-augmentations['scales'] = (0.2, 1.0)
-augmentations['ratio'] = (0.75, 1.3333333333333333)
-augmentations['brightness'] = 0.8 * s
-augmentations['contrast'] = 0.8 * s
-augmentations['saturation'] = 0.8 * s
-augmentations['hue'] = 0.2 * s
-augmentations['color_jitter_prob'] = 0.8  # random apply prob, 1.0=apply color jitter to all images
-augmentations['grayscale_prob'] = 0.2 
+transformations = {}
+transformations['scales'] = (0.2, 1.0)
+transformations['ratio'] = (0.75, 1.3333333333333333)
+transformations['brightness'] = 0.8 * s
+transformations['contrast'] = 0.8 * s
+transformations['saturation'] = 0.8 * s
+transformations['hue'] = 0.2 * s
+transformations['color_jitter_prob'] = 0.8  # random apply prob, 1.0=apply color jitter to all images
+transformations['grayscale_prob'] = 0.2 
 
-config['augmentations'] = augmentations
+config['transformations'] = transformations
 
 
