@@ -81,11 +81,11 @@ def main(args):
     optimizer = tf.keras.optimizers.Adam()
 
     # Build the optimizer with all trainable variables
-    img_dim = config.model.get("img_size")
-    model.one_step(input_shape=(1, img_dim, img_dim, 3))
-    all_trainable_params = model.get_all_trainable_params
-    print(all_trainable_params)
-    optimizer.build(all_trainable_params)
+   # img_dim = config.model.get("img_size")
+    #model.one_step(input_shape=(1, img_dim, img_dim, 3))
+    #all_trainable_params = model.get_all_trainable_params
+    #print(all_trainable_params)
+    #optimizer.build(all_trainable_params)
 
     ###################
     # Criterion

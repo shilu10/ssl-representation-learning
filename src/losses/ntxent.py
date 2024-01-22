@@ -7,7 +7,7 @@ class NTXent(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
         [1] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” arXiv. 2020, Accessed: Jan. 15, 2021. [Online]. Available: https://github.com/google-research/simclr.
     """
-    def __init__(self, tau=1, batch_size=32, **kwargs):
+    def __init__(self, config, batch_size=32, **kwargs):
         """ 
             Calculates the contrastive loss of the input data using NT_Xent. The
             equation can be found in the paper: https://arxiv.org/pdf/2002.05709.pdf
@@ -23,12 +23,16 @@ class NTXent(tf.keras.losses.Loss):
                 loss: The complete NT_Xent constrastive loss
         """
         super(NTXent, self).__init__(**kwargs)
-        self.batch_size = batch_size
-        self.cosine_sim = tf.keras.losses.CosineSimilarity(axis=-1, reduction=tf.keras.losses.Reduction.NONE)
-        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
-                                                                        reduction=tf.keras.losses.Reduction.SUM)
-        self.tau = tau
+        self.config = config 
 
+        self.tau = config.criterion.get("tau")
+        self.batch_size = batch_size
+        self.cosine_sim = tf.keras.losses.CosineSimilarity(
+                                                    axis=-1, 
+                                                    reduction=tf.keras.losses.Reduction.NONE)
+        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(
+                                                        from_logits=True, 
+                                                        reduction=tf.keras.losses.Reduction.SUM)
     def call(self, zis, zjs):
         # calculate the positive samples similarities
         l_pos = sim_func_dim1(zis, zjs)

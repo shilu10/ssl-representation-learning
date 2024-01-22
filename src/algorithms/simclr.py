@@ -14,20 +14,42 @@ from utils import get_negative_mask
 Linear probing accuracy: linear probing is a popular metric to evaluate self-supervised classifiers. It is computed as the accuracy of a logistic regression classifier trained on top of the encoder's features. In our case, this is done by training a single dense layer on top of the frozen encoder. Note that contrary to traditional approach where the classifier is trained after the pretraining phase, in this example we train it during pretraining. This might slightly decrease its accuracy, but that way we can monitor its value during training, which helps with experimentation and debugging.
 '''
 
+def _conv2d(**custom_kwargs):
+    def _func(*args, **kwargs):
+        kwargs.update(**custom_kwargs)
+        return Conv2D(*args, **kwargs)
+    return _func
+
+
+def _dense(**custom_kwargs):
+    def _func(*args, **kwargs):
+        kwargs.update(**custom_kwargs)
+        return Dense(*args, **kwargs)
+    return _func
+
+
 class SimCLR(tf.keras.models.Model):
     
     def __init__(self, config, *args, **kwargs):
         super(SimCLR, self).__init__(dynamic=True, *args, **kwargs)
+        self.feature_dims = config.model.get("feature_dims")
+
+        img_size = config.model.get("img_size")
         self.encoder = getattr(networks, config.networks.get("encoder_type"))(
                         include_top=False,
                         input_shape=(img_size, img_size, 3),
                         pooling='avg') 
-        
-        self.projection_head = projection_head 
 
-        # loss function
-        self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
-                                                                        reduction=tf.keras.losses.Reduction.SUM)
+        DEFAULT_ARGS = {
+            "use_bias": False,
+            "kernel_regularizer": tf.keras.regularizers.l2()}
+
+        self.projection_head = tf.keras.models.Sequential([
+                _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc1'), 
+                tf.keras.layers.Activation("relu"),
+                 _dense(**DEFAULT_ARGS)(self.feature_dims, name='proj_fc2'),
+            ])
+
          
     def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
@@ -37,46 +59,9 @@ class SimCLR(tf.keras.models.Model):
 
     def call(self, inputs):
         x = self.encoder(inputs, training=False)
+        x = self.projection_head(x)
 
         return x 
-
-    def reset_metrics(self):
-        self.contrastive_accuracy.reset_states()
-        self.correlation_accuracy.reset_states()
-
-    def update_contrastive_accuracy(self, features_1, features_2):
-        features_1 = tf.math.l2_normalize(features_1, axis=1)
-        features_2 = tf.math.l2_normalize(features_2, axis=1)
-        similarities = tf.matmul(features_1, features_2, transpose_b=True)
-
-        batch_size = tf.shape(features_1)[0]
-        contrastive_labels = tf.range(batch_size)
-        self.contrastive_accuracy.update_state(
-            tf.concat([contrastive_labels, contrastive_labels], axis=0),
-            tf.concat([similarities, tf.transpose(similarities)], axis=0),
-        )
-
-    def update_correlation_accuracy(self, features_1, features_2):
-        features_1 = (
-            features_1 - tf.reduce_mean(features_1, axis=0)
-        ) / tf.math.reduce_std(features_1, axis=0)
-        features_2 = (
-            features_2 - tf.reduce_mean(features_2, axis=0)
-        ) / tf.math.reduce_std(features_2, axis=0)
-
-        batch_size = tf.shape(features_1)[0]
-        batch_size = tf.cast(batch_size, dtype=tf.float32)
-        
-        cross_correlation = (
-            tf.matmul(features_1, features_2, transpose_a=True) / batch_size
-        )
-
-        feature_dim = tf.shape(features_1)[1]
-        correlation_labels = tf.range(feature_dim)
-        self.correlation_accuracy.update_state(
-            tf.concat([correlation_labels, correlation_labels], axis=0),
-            tf.concat([cross_correlation, tf.transpose(cross_correlation)], axis=0),
-        )
 
     def train_step(self, inputs):
   
@@ -98,7 +83,7 @@ class SimCLR(tf.keras.models.Model):
             zi = tf.math.l2_normalize(zi, axis=1)
             zj = tf.math.l2_normalize(zj, axis=1)
 
-            loss, labels, logits = self._loss(zi, zj, batch_size)
+            loss, labels, logits = self.loss(zi, zj, batch_size)
 
         encoder_params, proj_head_params = self.encoder.trainable_weights, self.projection_head.trainable_weights
         trainable_params = encoder_params + proj_head_params
@@ -191,3 +176,17 @@ class SimCLR(tf.keras.models.Model):
         loss = loss / (2 * batch_size)
 
         return loss, labels, logits
+
+    def one_step(self, input_shape):
+        inputs = tf.zeros(input_shape)
+
+        x = self.encoder(inputs)
+        x = self.projection_head(x)
+
+    @property
+    def get_all_trainable_params(self):
+        encoder_params = self.encoder.trainable_variables
+
+        projection_head_params = self.projection_head.trainable_variables
+
+        return encoder_params + projection_head_params

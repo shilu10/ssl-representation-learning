@@ -20,39 +20,33 @@ class BYOL(ContrastiveLearning):
         self.config = config 
         self.m = 0.99
 
+        img_size = config.model.get("img_size")
+
         # online encoder
-        f_online = getattr(networks, 
-                          config.networks.get("encoder_type"))             # encoder_online
-        self.f_online = f_online(data_format="channels_last",
-                                trainable=True)                  
+        self.f_online = getattr(networks, config.networks.get("encoder_type"))(
+                            include_top=False,
+                            input_shape=(img_size, img_size, 3),
+                            pooling='avg')           # encoder_online
         
         # online projection head 1
-        g_online = getattr(networks,
-                           config.networks.get("projectionhead_1_type"))   # projection head 1 
-        self.g_online = g_online()                                     
+        self.g_online = getattr(networks,
+                           config.networks.get("projectionhead_1_type"))()  # projection head 1 
        
         # online projection head 2 
-        q_online = getattr(networks,
-                           config.networks.get("projectionhead_2_type"))   # projection head 2
-        self.q_online = q_online()                         
+        self.q_online = getattr(networks,
+                           config.networks.get("projectionhead_2_type"))()   # projection head 2
 
         # target encoder
-        f_target = getattr(networks, 
-                          config.networks.get("encoder_type"))             # encoder_target
-        self.f_target = f_target(data_format="channels_last",
-                                trainable=True)                  
-
+        self.f_target = getattr(networks, config.networks.get("encoder_type"))(
+                            include_top=False,
+                            input_shape=(img_size, img_size, 3),
+                            pooling='avg')            # encoder_target
         
         # target projection head 
-        g_target = getattr(networks,
-                           config.networks.get("projectionhead_1_type"))   # projection head 1 target 
-        self.g_target = g_target()                             
+        self.g_target = getattr(networks,
+                           config.networks.get("projectionhead_1_type"))()   # projection head 1 target 
 
         self._initialize_target_network()
-
-        # metric function 
-        self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
          
     def compile(self, optimizer, loss, metrics, **kwargs):
@@ -74,8 +68,6 @@ class BYOL(ContrastiveLearning):
         x2 = inputs[1]   # (bs, img_size, img_size, 3)
 
         batch_size = x1.shape[0]
-
-        print(batch_size)
 
         # pass first view of image through target network
         h_target_1 = self.f_target(x1, training=True)
@@ -102,25 +94,35 @@ class BYOL(ContrastiveLearning):
             loss = self.loss(p_online, z_target)
 
         # Backward pass (update online networks)
-        f_params = self.f_online.trainable_variables
-        g_params = self.g_online.trainable_variables
-        q_params = self.q_online.trainable_variables
+        #f_params = self.f_online.trainable_variables
+        #g_params = self.g_online.trainable_variables
+        #q_params = self.q_online.trainable_variables
+
+        trainable_params = self.get_all_trainable_params
+        grads = tape.gradient(loss, trainable_params)
+        
+        self.optimizer.apply_gradients(
+            zip(
+                grads,
+                trainable_params,
+            )
+        )
 
         # Compute gradients
-        grads_f = tape.gradient(loss, f_params)
-        grads_g = tape.gradient(loss, g_params)
-        grads_q = tape.gradient(loss, q_params)
+        #grads_f = tape.gradient(loss, f_params)
+        #grads_g = tape.gradient(loss, g_params)
+        #grads_q = tape.gradient(loss, q_params)
 
         # Apply gradients using apply_gradients
-        self.optimizer.apply_gradients(zip(grads_f, f_params))
-        self.optimizer.apply_gradients(zip(grads_g, g_params))
-        self.optimizer.apply_gradients(zip(grads_q, q_params))
+        #self.optimizer.apply_gradients(zip(grads_f, f_params))
+        #self.optimizer.apply_gradients(zip(grads_g, g_params))
+        #self.optimizer.apply_gradients(zip(grads_q, q_params))
 
         # Update model's variables using the optimizer
         # (if you still prefer to use minimize, provide the tape explicitly)
-        self.optimizer.minimize(lambda: loss, var_list=f_params, tape=tape)
-        self.optimizer.minimize(lambda: loss, var_list=g_params, tape=tape)
-        self.optimizer.minimize(lambda: loss, var_list=q_params, tape=tape)
+        #self.optimizer.minimize(lambda: loss, var_list=f_params, tape=tape)
+        #self.optimizer.minimize(lambda: loss, var_list=g_params, tape=tape)
+        #self.optimizer.minimize(lambda: loss, var_list=q_params, tape=tape)
 
         # Delete the tape to free up resources
         del tape
