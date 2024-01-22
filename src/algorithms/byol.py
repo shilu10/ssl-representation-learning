@@ -6,6 +6,7 @@ from tensorflow.keras.losses import sparse_categorical_crossentropy
 import numpy as np 
 from src.networks import contrastive_task as networks
 from .common import ContrastiveLearning
+from .utils import _dense, _conv2d
 
 # https://github.com/drkostas?tab=repositories
 
@@ -18,9 +19,15 @@ class BYOL(ContrastiveLearning):
     def __init__(self, config, *args, **kwargs):
         super(BYOL, self).__init__(dynamic=True, *args, **kwargs)
         self.config = config 
-        self.m = 0.99
+        self.m = config.model.get('m')
 
         img_size = config.model.get("img_size")
+        hidden_dims = config.model.get("hidden_dims")
+        projection_dims = config.model.get("projection_dims")
+
+        DEFAULT_ARGS = {
+            "use_bias": False,
+            "kernel_regularizer": tf.keras.regularizers.l2()}
 
         # online encoder
         self.f_online = getattr(networks, config.networks.get("encoder_type"))(
@@ -29,12 +36,19 @@ class BYOL(ContrastiveLearning):
                             pooling='avg')           # encoder_online
         
         # online projection head 1
-        self.g_online = getattr(networks,
-                           config.networks.get("projectionhead_1_type"))()  # projection head 1 
+        self.g_online = tf.keras.models.Sequential([
+                            _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
+                            tf.keras.layers.BatchNormalization(), 
+                            tf.keras.layers.Activation("relu"), 
+                            _dense(**DEFAULT_ARGS)(projection_dims, name="fc2"),])
+
        
         # online projection head 2 
-        self.q_online = getattr(networks,
-                           config.networks.get("projectionhead_2_type"))()   # projection head 2
+        self.q_online = tf.keras.models.Sequential([
+                            _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
+                            tf.keras.layers.BatchNormalization(), 
+                            tf.keras.layers.Activation("relu"), 
+                            _dense(**DEFAULT_ARGS)(projection_dims, name="fc2"),])
 
         # target encoder
         self.f_target = getattr(networks, config.networks.get("encoder_type"))(
@@ -42,9 +56,14 @@ class BYOL(ContrastiveLearning):
                             input_shape=(img_size, img_size, 3),
                             pooling='avg')            # encoder_target
         
-        # target projection head 
-        self.g_target = getattr(networks,
-                           config.networks.get("projectionhead_1_type"))()   # projection head 1 target 
+
+        self.g_target = tf.keras.models.Sequential([
+                            _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
+                            tf.keras.layers.BatchNormalization(), 
+                            tf.keras.layers.Activation("relu"), 
+                            _dense(**DEFAULT_ARGS)(projection_dims, name="fc2"),])
+
+        self.one_step((1, img_size, img_size, 3))
 
         self._initialize_target_network()
 
@@ -93,11 +112,6 @@ class BYOL(ContrastiveLearning):
 
             loss = self.loss(p_online, z_target)
 
-        # Backward pass (update online networks)
-        #f_params = self.f_online.trainable_variables
-        #g_params = self.g_online.trainable_variables
-        #q_params = self.q_online.trainable_variables
-
         trainable_params = self.get_all_trainable_params
         grads = tape.gradient(loss, trainable_params)
         
@@ -108,24 +122,9 @@ class BYOL(ContrastiveLearning):
             )
         )
 
-        # Compute gradients
-        #grads_f = tape.gradient(loss, f_params)
-        #grads_g = tape.gradient(loss, g_params)
-        #grads_q = tape.gradient(loss, q_params)
-
-        # Apply gradients using apply_gradients
-        #self.optimizer.apply_gradients(zip(grads_f, f_params))
-        #self.optimizer.apply_gradients(zip(grads_g, g_params))
-        #self.optimizer.apply_gradients(zip(grads_q, q_params))
-
-        # Update model's variables using the optimizer
-        # (if you still prefer to use minimize, provide the tape explicitly)
-        #self.optimizer.minimize(lambda: loss, var_list=f_params, tape=tape)
-        #self.optimizer.minimize(lambda: loss, var_list=g_params, tape=tape)
-        #self.optimizer.minimize(lambda: loss, var_list=q_params, tape=tape)
-
         # Delete the tape to free up resources
         del tape
+        
         self.update_contrastive_accuracy(p_online, z_target)
         self.update_correlation_accuracy(p_online, z_target)
 
@@ -200,8 +199,12 @@ class BYOL(ContrastiveLearning):
     def one_step(self, input_shape):
         inputs = tf.zeros(input_shape, dtype=tf.float32)
 
-        x = self(inputs)
+        x = self.f_online(inputs)
+        x = self.g_online(x)
         x = self.q_online(x)
+
+        x = self.f_target(inputs)
+        x = self.g_target(x)
 
     @property
     def get_all_trainable_params(self):

@@ -1,7 +1,8 @@
 import tensorflow as tf 
 from tensorflow import keras 
 import numpy as np 
-
+from src.utils.contrastive_task import _cosine_simililarity_dim1 as sim_func_dim1, _cosine_simililarity_dim2 as sim_func_dim2
+from src.utils.contrastive_task import get_negative_mask
 
 class NTXent(tf.keras.losses.Loss):
     """ Normalized temperature-scaled CrossEntropy loss [1]
@@ -33,7 +34,7 @@ class NTXent(tf.keras.losses.Loss):
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(
                                                         from_logits=True, 
                                                         reduction=tf.keras.losses.Reduction.SUM)
-    def call(self, zis, zjs):
+    def __call__(self, zis, zjs):
         # calculate the positive samples similarities
         l_pos = sim_func_dim1(zis, zjs)
         negative_mask = get_negative_mask(self.batch_size)
@@ -65,4 +66,4 @@ class NTXent(tf.keras.losses.Loss):
         
         loss = loss / (2 * self.batch_size)
 
-        return loss
+        return (loss, labels, logits)

@@ -6,6 +6,9 @@ config = {}
 model = {}
 model['img_size'] = 96 
 model['algorithm_type'] = "BYOL"
+model['projection_dims'] = 128 
+model['hidden_dims'] = 256
+model['m'] = 0.99
 config['model'] = model 
 
 # model architecture names

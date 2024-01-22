@@ -37,7 +37,6 @@ class ContrastiveLearning(tf.keras.models.Model):
 
 		features_2 = (
             features_2 - tf.reduce_mean(features_2, axis=0)
-
         ) / tf.math.reduce_std(features_2, axis=0)
         
 		batch_size = tf.shape(features_1)[0]
