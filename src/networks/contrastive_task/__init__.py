@@ -1,3 +1,3 @@
 #from .resnet18 import ResNet18 
-from .resnet50 import ResNet50 
+from .resnet import ResNet50, ResNet18, ResNet34, ResNet101, ResNet152
 from .baseline import ProjectionHead, SmallCNN
