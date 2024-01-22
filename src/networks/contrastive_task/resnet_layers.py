@@ -1,6 +1,7 @@
 import tensorflow as tf 
 from tensorflow import keras 
-
+from tensorflow.keras import utils, backend, layers, models
+from .utils import get_conv_params, get_bn_params, handle_block_names
 
 # -------------------------------------------------------------------------
 #   Residual blocks
@@ -91,7 +92,7 @@ def residual_bottleneck_block(filters, stage, block, strides=None, attention=Non
             raise ValueError('Cut type not in ["pre", "post"]')
 
         # continue with convolution layers
-        x = layers.Conv2D(filters, (1, 1), name=conv_name + '1', use_bias **conv_params)(x)
+        x = layers.Conv2D(filters, (1, 1), name=conv_name + '1', **conv_params)(x)
 
         x = layers.BatchNormalization(name=bn_name + '2', **bn_params)(x)
         x = layers.Activation('relu', name=relu_name + '2')(x)

@@ -16,14 +16,14 @@ Linear probing accuracy: linear probing is a popular metric to evaluate self-sup
 
 class SimCLR(tf.keras.models.Model):
     
-    def __init__(self, encoder, projection_head, **kwargs):
-        super(SimCLR, self).__init__(dynamic=True, **kwargs)
-        self.encoder = encoder 
+    def __init__(self, config, *args, **kwargs):
+        super(SimCLR, self).__init__(dynamic=True, *args, **kwargs)
+        self.encoder = getattr(networks, config.networks.get("encoder_type"))(
+                        include_top=False,
+                        input_shape=(img_size, img_size, 3),
+                        pooling='avg') 
+        
         self.projection_head = projection_head 
-
-        # metric function 
-        self.contrastive_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        self.correlation_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
         # loss function
         self.criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
@@ -34,6 +34,11 @@ class SimCLR(tf.keras.models.Model):
         self.optimizer = optimizer
         self.loss = loss
         self.acc_metrics = metrics
+
+    def call(self, inputs):
+        x = self.encoder(inputs, training=False)
+
+        return x 
 
     def reset_metrics(self):
         self.contrastive_accuracy.reset_states()
