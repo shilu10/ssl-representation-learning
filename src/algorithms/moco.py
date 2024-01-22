@@ -23,7 +23,7 @@ class MoCo(ContrastiveLearning):
         self.config = config 
 
         DEFAULT_ARGS = {
-            "use_bias": True,
+            "use_bias": False,
             "kernel_regularizer": tf.keras.regularizers.l2()}
 
         self.m = config.model.get("m")
