@@ -5,23 +5,21 @@ config = {}
 
 model = {}
 model['img_size'] = 96 
-model['algorithm_type'] = "MoCo"
-model['m'] = 0.999
-model['version'] = "v1"
-model['temp'] = 0.07
-model['queue_len'] = 65536
+model['algorithm_type'] = "PIRL"
 model['projection_dims'] = 128  # num_classes
+model['pretext_task_type'] = "JigSaw"
 config['model'] = model 
 
 # model architecture names
 networks = {}
 networks['encoder_type'] = 'ResNet50'
+networks['generic_type'] = "GenericTask"
+networks['transformed_type'] = "JigSawTask"
 config['networks'] = networks 
 
 # dataloader
 dataloader = {}
-dataloader['type'] = 'Common'
-dataloader['augmentations_type'] = 'MoCoV1'
+dataloader['type'] = 'PIRL'
 config['dataloader'] = dataloader
 
 # optimizer
@@ -33,19 +31,13 @@ config['optimizer'] = optimizer
 
 # criterion(loss function)
 criterion = {}
-criterion['type'] = "InfoNCE"
+criterion['type'] = "NCE"
+config['temp'] = 1.0
 config['criterion'] = criterion
 
+# mmory bank
+memory_bank = {}
+memory_bank['weight'] = 0.5
+memory_bank["datapath"] = ".stl10/unlabeled_images/"
 
-# pretext type specific args
-augmentations = {}
-augmentations['scales'] = (0.2, 1.0)
-augmentations['ratio'] = (0.75, 1.3333333333333333)
-augmentations['brightness'] = 0.4
-augmentations['contrast'] = 0.4
-augmentations['saturation'] = 0.4
-augmentations['hue'] = 0.4
-augmentations['color_jitter_prob'] = 1.0  # random apply prob, 1.0=apply color jitter to all images
-augmentations['grayscale_prob'] = 0.2 
-
-config['augmentations'] = augmentations
+config['memory_bank'] = memory_bank

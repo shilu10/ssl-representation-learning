@@ -21,7 +21,7 @@ config['networks'] = networks
 # dataloader
 dataloader = {}
 dataloader['type'] = 'Common'
-dataloader['augmentations_type'] = 'MoCoV1'
+dataloader['transform_type'] = 'MoCoV1'
 config['dataloader'] = dataloader
 
 # optimizer
@@ -38,14 +38,14 @@ config['criterion'] = criterion
 
 
 # pretext type specific args
-augmentations = {}
-augmentations['scales'] = (0.2, 1.0)
-augmentations['ratio'] = (0.75, 1.3333333333333333)
-augmentations['brightness'] = 0.4
-augmentations['contrast'] = 0.4
-augmentations['saturation'] = 0.4
-augmentations['hue'] = 0.4
-augmentations['color_jitter_prob'] = 1.0  # random apply prob, 1.0=apply color jitter to all images
-augmentations['grayscale_prob'] = 0.2 
+transformations = {}
+transformations['scales'] = (0.2, 1.0)
+transformations['ratio'] = (0.75, 1.3333333333333333)
+transformations['brightness'] = 0.4
+transformations['contrast'] = 0.4
+transformations['saturation'] = 0.4
+transformations['hue'] = 0.4
+transformations['color_jitter_prob'] = 1.0  # random apply prob, 1.0=apply color jitter to all images
+transformations['grayscale_prob'] = 0.2 
 
-config['augmentations'] = augmentations
+config['transformations'] = transformations

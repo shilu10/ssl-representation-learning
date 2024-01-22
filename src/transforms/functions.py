@@ -128,3 +128,52 @@ class GrayScale:
 	        image = tf.tile(image, [1, 1, 3])
 
 	    return image 
+
+
+class JigSaw(object):
+    def __init__(self, n_patches):
+        self.n_patches = n_patches
+    
+    def __call__(self, img):
+        assert isinstance(img, tf.Tensor)
+        img = tf.expand_dims(img, axis=0)
+        transformed_image = img.numpy()  # Convert tf.Tensor to NumPy array
+        batch_size, img_size_1, img_size_2, channels = transformed_image.shape
+        self.patch_size_1 = img_size_1 // self.n_patches[0]
+        self.patch_size_2 = img_size_2 // self.n_patches[1]
+
+        transformed_image = tf.image.extract_patches(
+            transformed_image,
+            sizes=[1, self.patch_size_1, self.patch_size_2, 1],
+            strides=[1, self.patch_size_1, self.patch_size_2, 1],
+            rates=[1, 1, 1, 1],
+            padding='VALID'
+        )
+
+        transformed_image = tf.reshape(transformed_image, [batch_size, -1, self.patch_size_1, self.patch_size_2, channels])
+
+        rand_perm = tf.random.shuffle(tf.range(tf.shape(transformed_image)[1]))
+        transformed_image = tf.gather(transformed_image, rand_perm, axis=1)
+
+        # Convert NumPy array back to tf.Tensor
+        img = tf.convert_to_tensor(img)
+        transformed_image = tf.convert_to_tensor(transformed_image)
+
+        return img[0], transformed_image[0]
+
+
+class Rotate(object):
+    def __init__(self, num_positions=4, return_image=False):
+        self.return_image = return_image
+        self.num_positions = num_positions
+
+    def __call__(self, img):
+        image = img
+        ind = tf.random.uniform(shape=(), minval=0, maxval=self.num_positions, dtype=tf.int32)
+
+        transformed_image = tf.image.rot90(image, k=ind)
+
+        if self.return_image:
+            return img, transformed_image
+
+        return transformed_image
