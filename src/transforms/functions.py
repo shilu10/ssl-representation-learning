@@ -131,16 +131,26 @@ class GrayScale:
 
 
 class JigSaw(object):
-    def __init__(self, n_patches):
+    def __init__(self, config):
+        self.config = config 
+
+        n_patches = config.transformations.get("n_patches")
+        n_patches = n_patches if isinstance(n_patches, tuple) else (n_patches, n_patches)
         self.n_patches = n_patches
+
+        self.img_size_1 = config.model.get("img_size")
+        self.img_size_2 = config.model.get("img_size")
+
+        self.total_patches = n_patches[0] * n_patches[1]
     
     def __call__(self, img):
         assert isinstance(img, tf.Tensor)
         img = tf.expand_dims(img, axis=0)
-        transformed_image = img.numpy()  # Convert tf.Tensor to NumPy array
-        batch_size, img_size_1, img_size_2, channels = transformed_image.shape
-        self.patch_size_1 = img_size_1 // self.n_patches[0]
-        self.patch_size_2 = img_size_2 // self.n_patches[1]
+        channels = 3 
+        transformed_image = img
+       # batch_size, img_size_1, img_size_2, channels = transformed_image.shape
+        self.patch_size_1 = self.img_size_1 // self.n_patches[0]
+        self.patch_size_2 = self.img_size_2 // self.n_patches[1]
 
         transformed_image = tf.image.extract_patches(
             transformed_image,
@@ -150,7 +160,7 @@ class JigSaw(object):
             padding='VALID'
         )
 
-        transformed_image = tf.reshape(transformed_image, [batch_size, -1, self.patch_size_1, self.patch_size_2, channels])
+        transformed_image = tf.reshape(transformed_image, [-1, self.total_patches, self.patch_size_1, self.patch_size_2, channels])
 
         rand_perm = tf.random.shuffle(tf.range(tf.shape(transformed_image)[1]))
         transformed_image = tf.gather(transformed_image, rand_perm, axis=1)
@@ -163,9 +173,10 @@ class JigSaw(object):
 
 
 class Rotate(object):
-    def __init__(self, num_positions=4, return_image=False):
-        self.return_image = return_image
-        self.num_positions = num_positions
+    def __init__(self, config):
+        self.config = config 
+        self.return_image = config.transformations.get("return_image")
+        self.num_positions = config.transformations.get("num_positions")
 
     def __call__(self, img):
         image = img

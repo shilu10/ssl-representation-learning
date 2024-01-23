@@ -12,7 +12,7 @@ class NCE(tf.keras.losses.Loss):
         self.batch_size = batch_size
         
 
-    def call(self, f_vi, g_vit, negatives):
+    def __call__(self, f_vi, g_vit, negatives):
         assert f_vi.shape == g_vit.shape, "Shapes do not match" + str(f_vi.shape) + ' != ' + str(g_vit.shape)
         #  predicted input values of 0 and 1 are undefined (hence the clip by value)
 

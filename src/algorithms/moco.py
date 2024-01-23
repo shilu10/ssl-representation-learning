@@ -5,7 +5,7 @@ import tensorflow.keras.backend as K
 from tensorflow.keras.losses import sparse_categorical_crossentropy
 import numpy as np 
 from src.networks import contrastive_task as networks
-from .common import ContrastiveLearning, _dense, _conv2d
+from .common import ContrastiveLearning
 from .utils import _dense, _conv2d
 
 

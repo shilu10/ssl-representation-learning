@@ -10,6 +10,7 @@ from src.networks import contrastive_task as networks
 from src import init_memory_bank 
 from .common import ContrastiveLearning
 from .utils import _dense, _conv2d
+from src import memory_bank
 
 
 class PIRL(ContrastiveLearning):
@@ -23,13 +24,22 @@ class PIRL(ContrastiveLearning):
         self.pretext_task_type = config.model.get("pretext_task_type")
         
         self.encoder = getattr(networks, config.networks.get("encoder_type"))(
-                include_top=True,
-                input_shape=(img_size, img_size, 3),
-                pooling='avg')
+                include_top=False,
+                input_shape=(None, None, 3),
+                pooling=None)
 
         self.f = getattr(networks, config.networks.get("generic_type"))(self.projection_dims)
 
-        self.g = getattr(networks, config.networks.get("transformed_type"))(self.projection_dims)
+        if self.pretext_task_type == "JigSaw":
+            n_patches = self.config.transformations.get("n_patches")
+            n_patches = n_patches if isinstance(n_patches, tuple) else (n_patches, n_patches)
+            self.g = getattr(networks, config.networks.get("transformed_type"))(
+                                            encoding_size=self.projection_dims, jigsaw_size=n_patches)
+
+        else:
+            self.g = getattr(networks, config.networks.get("transformed_type"))(encoding_size=self.projection_dims)
+
+        self.initialize_memory_bank()
 
     def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
@@ -42,7 +52,7 @@ class PIRL(ContrastiveLearning):
 
         batch_size = original.shape[0]
 
-        if self.pretext_task_type == "jigsaw":
+        if self.pretext_task_type == "JigSaw":
             transformed = tf.concat([*transformed], axis=0)
 
         with tf.GradientTape() as tape:
@@ -126,7 +136,9 @@ class PIRL(ContrastiveLearning):
         return {"p_loss": probe_loss, "p_acc": self.probe_accuracy.result()} 
 
     def initialize_memory_bank(self):
-        self.memory_bank = init_memory_bank.main(self.config)
+        #self.memory_bank = init_memory_bank.main(self.config)
+
+        self.memory_bank = memory_bank.MemoryBank((100000, 128))
 
     def one_step(self, input_shape):
         pass 

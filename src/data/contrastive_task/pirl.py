@@ -24,9 +24,9 @@ class PIRL:
     def __augment(self, index, image):
         pretext_task_type = self.config.model.get("pretext_task_type")
 
-        transforms = getattr(transforms, pretext_task_type)
+        augmenter = getattr(transforms, pretext_task_type)
 
-        transformed_image = augmenter(image)
+        _, transformed_image = augmenter(self.config)(image)
 
         image /= 255.0
         transformed_image /= 255.0
