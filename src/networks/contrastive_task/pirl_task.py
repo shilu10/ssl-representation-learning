@@ -3,9 +3,9 @@ from tensorflow import keras
 import tensorflow_addons as tfa
 
 
-class JigsawTask(tf.keras.models.Model):
+class JigSawTask(tf.keras.models.Model):
     def __init__(self, encoding_size, jigsaw_size):
-        super(JigsawTask, self).__init__()
+        super(JigSawTask, self).__init__()
         if isinstance(jigsaw_size, int):
             self.jigsaw_size = jigsaw_size**2
 
