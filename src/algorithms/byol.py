@@ -31,37 +31,37 @@ class BYOL(ContrastiveLearning):
 
         # online encoder
         self.f_online = getattr(networks, config.networks.get("encoder_type"))(
-                            include_top=False,
-                            input_shape=(img_size, img_size, 3),
-                            pooling='avg')           # encoder_online
+                                            include_top=False,
+                                            input_shape=(img_size, img_size, 3),
+                                            pooling='avg')           # encoder_online
         
         # online projection head 1
         self.g_online = tf.keras.models.Sequential([
-                            _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
-                            tf.keras.layers.BatchNormalization(), 
-                            tf.keras.layers.Activation("relu"), 
-                            _dense(**DEFAULT_ARGS)(projection_dims, name="fc2"),])
+                                        _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
+                                        tf.keras.layers.BatchNormalization(), 
+                                        tf.keras.layers.Activation("relu"), 
+                                        _dense(**DEFAULT_ARGS)(projection_dims, name="fc2")])
 
        
         # online projection head 2 
         self.q_online = tf.keras.models.Sequential([
-                            _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
-                            tf.keras.layers.BatchNormalization(), 
-                            tf.keras.layers.Activation("relu"), 
-                            _dense(**DEFAULT_ARGS)(projection_dims, name="fc2"),])
+                                        _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
+                                        tf.keras.layers.BatchNormalization(), 
+                                        tf.keras.layers.Activation("relu"), 
+                                        _dense(**DEFAULT_ARGS)(projection_dims, name="fc2")])
 
         # target encoder
         self.f_target = getattr(networks, config.networks.get("encoder_type"))(
-                            include_top=False,
-                            input_shape=(img_size, img_size, 3),
-                            pooling='avg')            # encoder_target
+                                            include_top=False,
+                                            input_shape=(img_size, img_size, 3),
+                                            pooling='avg')            # encoder_target
         
 
         self.g_target = tf.keras.models.Sequential([
-                            _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
-                            tf.keras.layers.BatchNormalization(), 
-                            tf.keras.layers.Activation("relu"), 
-                            _dense(**DEFAULT_ARGS)(projection_dims, name="fc2"),])
+                                        _dense(**DEFAULT_ARGS)(hidden_dims, name="fc1"), 
+                                        tf.keras.layers.BatchNormalization(), 
+                                        tf.keras.layers.Activation("relu"), 
+                                        _dense(**DEFAULT_ARGS)(projection_dims, name="fc2")])
 
         self.one_step((1, img_size, img_size, 3))
 
@@ -215,3 +215,9 @@ class BYOL(ContrastiveLearning):
         all_online_params = f_online_params + g_online_params + q_online_params
 
         return all_online_params
+
+    def save_encoder_weights(self, filepath):
+        self.f_online.save_weights(filepath)
+
+    def load_encoder_weights(self, filepath):
+        self.f_online.load_weights(filepath, overwrite=True)

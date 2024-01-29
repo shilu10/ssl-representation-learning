@@ -26,19 +26,20 @@ class SimCLR(ContrastiveLearning):
 
         img_size = config.model.get("img_size")
         self.encoder = getattr(networks, config.networks.get("encoder_type"))(
-                        include_top=False,
-                        input_shape=(img_size, img_size, 3),
-                        pooling='avg') 
+                                            include_top=False,
+                                            input_shape=(img_size, img_size, 3),
+                                            pooling='avg'
+                                        ) 
 
         DEFAULT_ARGS = {
             "use_bias": False,
             "kernel_regularizer": tf.keras.regularizers.l2()}
 
         self.projection_head = tf.keras.models.Sequential([
-                _dense(**DEFAULT_ARGS)(hidden_dims, name='proj_fc1'), 
-                tf.keras.layers.Activation("relu"),
-                 _dense(**DEFAULT_ARGS)(projection_dims, name='proj_fc2'),
-            ])
+                                        _dense(**DEFAULT_ARGS)(hidden_dims, name='proj_fc1'), 
+                                        tf.keras.layers.Activation("relu"),
+                                         _dense(**DEFAULT_ARGS)(projection_dims, name='proj_fc2'),
+                                    ])
 
     def compile(self, optimizer, loss, metrics, **kwargs):
         super().compile(**kwargs)
@@ -145,3 +146,9 @@ class SimCLR(ContrastiveLearning):
         projection_head_params = self.projection_head.trainable_variables
 
         return encoder_params + projection_head_params
+
+    def save_encoder_weights(self, filepath):
+        self.encoder.save_weights(filepath)
+
+    def load_encoder_weights(self, filepath):
+        self.encoder.load_weights(filepath, overwrite=True)

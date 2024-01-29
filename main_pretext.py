@@ -1,14 +1,8 @@
 import tensorflow as tf 
 from tensorflow.keras.utils import Progbar
-from tensorflow import keras 
-import os, sys, shutil, random
 from imutils import paths 
-from tqdm import tqdm
 import numpy as np 
-import argparse 
 from datetime import datetime 
-import itertools 
-import pickle
 
 import src.networks.pretext_task as networks
 import src.data.pretext_task as dataloaders

@@ -1,18 +1,74 @@
 import tensorflow as tf 
-from tensorflow import keras 
+import os 
 import numpy as np 
-import os, sys, shutil
 
 
 
-class CustomMemoryBankCallback(CSVLogger):
-    """Save averaged logs during training.
-    """
-    def on_epoch_begin(self, epoch, logs=None):
-        pass
+class CustomModelCheckpoint(tf.keras.callbacks.Callback):
+    def __init__(self, checkpoint_dir, filepath, save_freq, max_to_keep):
+        super(CustomModelCheckpoint, self).__init__()
+        self.checkpoint_dir = checkpoint_dir
+        self.filepath = filepath
+        self.save_freq = save_freq
+        self.max_to_keep = max_to_keep
+
+    def on_train_begin(self, logs=None):
+        # Load weights from the latest checkpoint if available
+        all_checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.endswith('.h5')]
+        all_checkpoints.sort()  # Sort by epoch number
+        latest_checkpoint = all_checkpoints[-1] if all_checkpoints else None
+
+        if latest_checkpoint is not None:
+            self.model.build((None, 96, 96, 3))
+            self.model.load_weights(self.checkpoint_dir + "/" + latest_checkpoint)
+            tf.print(f"Loaded weights from the latest checkpoint: {latest_checkpoint}")
+
+        else:
+            tf.print("No previous checkpoints found. Training from scratch.")
+
+    def on_epoch_end(self, epoch, logs=None):
+
+        if epoch % self.save_freq == 0:
+            self.model.save_weights(self.filepath.format(epoch=epoch))
+
+            tf.print(f"Saving Checkpoint at: {self.filepath.format(epoch=epoch)}")
+
+            # Keep a maximum number of checkpoints
+            all_checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.endswith('.h5')]
+            all_checkpoints.sort()  # Sort by epoch number
+            checkpoints_to_remove = all_checkpoints[:-self.max_to_keep]
+
+            for checkpoint in checkpoints_to_remove:
+                os.remove(self.checkpoint_dir + "/" + checkpoint)
 
 
-class CustomCSVLogger(CSVLogger):
+class CustomTensorBoard(tf.keras.callbacks.Callback):
+    def __init__(self, log_dir='logs', update_freq='epoch'):
+        super(CustomTensorBoard, self).__init__()
+        self.log_dir = log_dir
+        self.update_freq = update_freq
+
+    def on_train_begin(self, logs=None):
+        self.writer = tf.summary.create_file_writer(self.log_dir + "/train")
+        self.writer.set_as_default()
+
+    def on_epoch_end(self, epoch, logs=None):
+        with self.writer.as_default():
+            for metric_name, metric_val in logs.items():
+                metric_name = "epoch_" + metric_name
+                tf.summary.scalar(metric_name, metric_val, step=epoch)
+
+    def on_batch_end(self, batch, logs=None):
+        with self.writer.as_default():
+            for metric_name, metric_val in logs.items():
+                metric_name = "batch_" + metric_name
+                tf.summary.scalar(metric_name, metric_val, step=batch)
+
+    def on_train_end(self, logs=None):
+        self.writer.close()
+
+
+class CustomCSVLogger(tf.keras.callbacks.CSVLogger):
     """Save averaged logs during training.
     """
     def on_epoch_begin(self, epoch, logs=None):
@@ -30,7 +86,7 @@ class CustomCSVLogger(CSVLogger):
         super(CustomCSVLogger, self).on_epoch_end(epoch, final_logs)
 
 
-ef get_callbacks(args):
+def get_callbacks(args):
     if not args.resume:
         if args.checkpoint or args.history or args.tensorboard:
             if os.path.isdir(f'{args.result_path}/{args.task}/{args.stamp}'):

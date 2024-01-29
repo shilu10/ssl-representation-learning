@@ -15,7 +15,7 @@ def  main_parse_args():
 
 
     parser.add_argument('--tensorboard', type=str,
-                        default='logs/', help="Whether to use tensorboard summaries")
+                        default='logs', help="Whether to use tensorboard summaries")
 
     parser.add_argument('--history', type=str,
                         default='history', help="Whether to use history callbacks")
@@ -120,18 +120,6 @@ def main_pretext_parse_args():
                        type=bool, 
                        default=True, 
                        help='whether or not to shuffle the dataset')
-
-    #parser.add_argument('--permutation_arr_path', type=str, default='permutation_max_1000.npy')
-
-    #parser.add_argument('--shuffle', type=bool, default=True)
-    #parser.add_argument('--grid_size', type=Union[tuple, int], default=(3, 3))
-
-    
-
-    #parser.add_argument('--use_all_rotations', type=bool, default=False)
-
-    #parser.add_argument('--patch_dim', type=int, default=15)
-    #parser.add_argument('--gap', type=int, default=2)
 
     # config
     parser.add_argument('--config_path', 

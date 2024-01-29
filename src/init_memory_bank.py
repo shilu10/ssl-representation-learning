@@ -1,13 +1,10 @@
 import tensorflow as tf 
-from tensorflow import keras 
-import argparse 
-import os, sys, shutil
-import numpy as np 
 from imutils import paths
 
 from src.utils.common import load_module_from_source
 import src.networks.contrastive_task as networks
 from src.memory_bank import MemoryBank
+
 
 
 def parse_image(indices, image_path):

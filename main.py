@@ -1,11 +1,8 @@
 import tensorflow as tf 
-from tensorflow import keras 
-import os, sys, shutil, imutils
-import numpy as np 
-from argparse import ArgumentParser
+import imutils, os
+import pickle 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # suppress info-level logs 
-from tensorflow.keras.layers.experimental import preprocessing
 
 from arguments import main_parse_args
 from helper import get_logger
@@ -13,13 +10,13 @@ from helper import get_logger
 import src.data.contrastive_task as dataloaders 
 import src.losses as losses 
 import src.algorithms as algorithms
-
 from src.utils.common import load_module_from_source
-
-import pickle 
+from src.callbacks import CustomModelCheckpoint, CustomTensorBoard
 
 
 tf.get_logger().setLevel("WARN")  # suppress info-level logs
+
+
 
 def main(args):
 
@@ -96,17 +93,26 @@ def main(args):
     # CALLBACKS
     ###################
 
-    checkpoint_filepath = args.checkpoint
-    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=checkpoint_filepath,
-        monitor='c_loss',
-        mode='min',
-        save_best_only=True,
-        save_weights_only=True,
-    )
+    checkpoint_dir = args.checkpoint
 
-    tb_callback = tf.keras.callbacks.TensorBoard(args.tensorboard + '/' + args.contrastive_task_type, 
-                                                update_freq=1)
+    # Ensure the checkpoint directory exists
+    tf.io.gfile.makedirs(checkpoint_dir)
+
+    checkpoint_filepath = checkpoint_dir + "/" + args.contrastive_task_type + "_{epoch:02d}.h5"
+    model_checkpoint = CustomModelCheckpoint(
+                            checkpoint_dir=checkpoint_dir,
+                            filepath=checkpoint_filepath, 
+                            save_freq=3, 
+                            max_to_keep=2)
+
+    ###################
+    # TensorBoard
+    ###################
+
+    tensorbaord_dir_path = args.tensorboard + '/' + args.contrastive_task_type
+    #tb_callback = tf.keras.callbacks.TensorBoard(tensorbaord_dir_path,
+                                               # update_freq=1)
+    tb_callback = CustomTensorBoard(tensorbaord_dir_path, 1)
 
     model.compile(
         optimizer=optimizer, 
@@ -120,10 +126,9 @@ def main(args):
     history = model.fit(dataloader, 
                         epochs=args.num_epochs, 
                         #validation_data=test_dataset, 
-                        callbacks=[tb_callback, model_checkpoint_callback], 
-                        steps_per_epoch=steps_per_epoch)
+                        callbacks=[tb_callback, model_checkpoint],#)
+                        steps_per_epoch=10)
     
-
 
 if __name__ == '__main__':
     args = main_parse_args()
