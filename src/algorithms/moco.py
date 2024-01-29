@@ -19,7 +19,8 @@ class MoCo(ContrastiveLearning):
 
         DEFAULT_ARGS = {
             "use_bias": False,
-            "kernel_regularizer": tf.keras.regularizers.l2()}
+            "kernel_regularizer": tf.keras.regularizers.l2()
+        }
 
         self.m = config.model.get("m")
         self.version = config.model.get("version")
@@ -32,9 +33,9 @@ class MoCo(ContrastiveLearning):
         def set_encoder(name):
             img_size = self.config.model.get("img_size")
             backbone = getattr(networks, config.networks.get("encoder_type"))(
-                include_top=True,
-                input_shape=(img_size, img_size, 3),
-                pooling='avg')
+                                                include_top=True,
+                                                input_shape=(img_size, img_size, 3),
+                                                pooling='avg')
             
             x = backbone.output
             x = _dense(**DEFAULT_ARGS)(self.hidden_dims, name='proj_fc1')(x)
@@ -226,3 +227,9 @@ class MoCo(ContrastiveLearning):
         encoder_q_params = self.encoder_q.trainable_variables
         
         return encoder_q_params
+
+     def save_encoder_weights(self, filepath):
+        self.encoder_q.save_weights(filepath)
+
+    def load_encoder_weights(self, filepath):
+        self.encoder_q.load_weights(filepath, overwrite=True)

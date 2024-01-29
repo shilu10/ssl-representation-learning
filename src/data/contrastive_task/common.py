@@ -22,6 +22,8 @@ class Common:
 		return image 
 
 	def __augment(self, image):
+		print(self.config.dataloader.get("transform_type"))
+
 		augmenter = getattr(transforms, self.config.dataloader.get("transform_type"))
 		augmenter = augmenter(self.config)
 
@@ -43,7 +45,7 @@ class Common:
 		# Shuffle if needed
 		if self.shuffle:
 			dataset = dataset.shuffle(buffer_size=len(self.image_files_path), reshuffle_each_iteration=True)
-
+		
 		# parallely parse image
 		dataset = dataset.map(self.__parse_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
