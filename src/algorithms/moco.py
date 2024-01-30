@@ -228,7 +228,7 @@ class MoCo(ContrastiveLearning):
         
         return encoder_q_params
 
-     def save_encoder_weights(self, filepath):
+    def save_encoder_weights(self, filepath):
         self.encoder_q.save_weights(filepath)
 
     def load_encoder_weights(self, filepath):

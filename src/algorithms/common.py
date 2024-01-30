@@ -50,10 +50,10 @@ class ContrastiveLearning(tf.keras.models.Model):
 		self.correlation_accuracy.update_state(
             tf.concat([correlation_labels, correlation_labels], axis=0),
             tf.concat([cross_correlation, tf.transpose(cross_correlation)], axis=0),
-        )
-     
-    def save_encoder_weights(self, filepath):
-    	pass 
+     	)
 
-    def laod_encoder_weights(self, filepath):
-    	pass 
+	def save_encoder_weights(self, filepath):
+		pass 
+
+	def laod_encoder_weights(self, filepath):
+		pass 
