@@ -3,6 +3,7 @@ from tensorflow.keras.utils import Progbar
 from imutils import paths 
 import numpy as np 
 from datetime import datetime 
+import os 
 
 import src.networks.pretext_task as networks
 import src.data.pretext_task as dataloaders
@@ -74,6 +75,9 @@ def main(args):
 										batch_size=args.batch_size, 
 										shuffle=args.shuffle).create_dataset()
 
+	for batch in train_dataloader.take(1):
+		print(batch)
+
 	# val dataloader
 	if args.use_validation:
 		val_dataloader = getattr(dataloaders, config.dataloader.get('type'))
@@ -118,6 +122,8 @@ def main(args):
 		network = network(config=config, 
 						 n_classes=config.model.get('num_classes'),
 						 name=args.pretext_task_type)
+
+		print(network)
 	
 	#-----------------------
 	# Load Optimizer
@@ -263,6 +269,7 @@ def main(args):
 		#progbar.add(0, values=values)
 		#progbar.add(0, values=val_values)
 
+		print(train_dataloader)
 		# train step
 		for step, batch in enumerate(train_dataloader):
 
@@ -334,7 +341,10 @@ def main(args):
 					train_writer.flush()
 
 			else:
-
+				if batch[0].shape != (args.batch_size, 2, 96, 96, 3):
+					print(f"Shape mistmatch in train loader, {batch[0].shape}")
+					raise 
+	
 				result = train(
 						network = network,
 						batch = batch,
@@ -527,6 +537,10 @@ def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker
 	
 	with tf.GradientTape() as tape:
 		logits = network(inputs, training=True)
+
+		if logits.shape != (256, 8):
+			print("logits shape is not matching in train")
+			raise
 
 		# compute custom loss
 		loss = criterion(labels, logits)

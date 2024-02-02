@@ -86,6 +86,24 @@ class AlexNetJigSaw(tf.keras.models.Model):
 
         self.out = tf.keras.layers.Dense(n_classes)
 
+    def forward_once(self, inputs, training=False):
+        B, T, H, W, C = inputs.shape 
+
+        x = self.conv_1(inputs[i])
+        x = self.lrn_1(x)
+
+        x = self.conv_2(x)
+        x = self.lrn_2(x)
+
+        x = self.conv_3(x)
+        x = self.conv_4(x)
+        x = self.conv_5(x)
+
+        x = self.flatten(x)
+        x = self.fc_1(x)
+
+        return x 
+
     def call(self, inputs, training=False):
         # B-batch, T-tile, H-height, W-width, C-channels
         B, T, H, W, C = inputs.shape 

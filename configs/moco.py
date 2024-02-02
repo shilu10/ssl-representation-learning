@@ -10,6 +10,7 @@ model['m'] = 0.999
 model['version'] = "v1"
 model['temp'] = 0.07
 model['queue_len'] = 65536
+model['hidden_dims'] = 128
 model['projection_dims'] = 128  # num_classes
 config['model'] = model 
 
