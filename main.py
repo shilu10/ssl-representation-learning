@@ -17,7 +17,6 @@ from src.callbacks import CustomModelCheckpoint, CustomTensorBoard
 tf.get_logger().setLevel("WARN")  # suppress info-level logs
 
 
-
 def main(args):
 
     module_name = "config"
@@ -102,8 +101,8 @@ def main(args):
     model_checkpoint = CustomModelCheckpoint(
                             checkpoint_dir=checkpoint_dir,
                             filepath=checkpoint_filepath, 
-                            save_freq=3, 
-                            max_to_keep=2)
+                            save_freq=args.checkpoint_save_freq, 
+                            max_to_keep=args.checkpoint_max_keep)
 
     ###################
     # TensorBoard
@@ -126,8 +125,7 @@ def main(args):
     history = model.fit(dataloader, 
                         epochs=args.num_epochs, 
                         #validation_data=test_dataset, 
-                        callbacks=[tb_callback, model_checkpoint],#)
-                        steps_per_epoch=10)
+                        callbacks=[tb_callback, model_checkpoint],)
     
 
 if __name__ == '__main__':

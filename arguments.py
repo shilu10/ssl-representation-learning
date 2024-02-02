@@ -29,6 +29,13 @@ def  main_parse_args():
     parser.add_argument('--checkpoint', type=str,
                         default='ckpt', help="whether to use tensorboard checkpoint")
 
+    parser.add_argument('--checkpoint_save_freq', type=int,
+                        default=1, help="Checkpoint Saving frequency epochs")
+
+    parser.add_argument('--checkpoint_max_keep', type=int,
+                        default=3, help="Max Checkpoint to keep in checkpoint Directory")
+
+
     parser.add_argument('--contrastive_task_type', type=str,
                         default='simclr', help="type of ssl model to train, options(simclr, mocov1, v2)")
 
