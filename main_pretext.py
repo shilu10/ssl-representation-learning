@@ -341,9 +341,6 @@ def main(args):
 					train_writer.flush()
 
 			else:
-				if batch[0].shape != (args.batch_size, 2, 96, 96, 3):
-					print(f"Shape mistmatch in train loader, {batch[0].shape}")
-					raise 
 	
 				result = train(
 						network = network,
@@ -537,10 +534,6 @@ def train(network, batch, optimizer, criterion, top1_acc, top5_acc, loss_tracker
 	
 	with tf.GradientTape() as tape:
 		logits = network(inputs, training=True)
-
-		if logits.shape != (256, 8):
-			print("logits shape is not matching in train")
-			raise
 
 		# compute custom loss
 		loss = criterion(labels, logits)
