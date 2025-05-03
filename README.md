@@ -1,6 +1,32 @@
 # ssl-representation-learning
 
-This repository provides implementations of self-supervised learning algorithms, encompassing both contrastive learning and auxiliary pretext task learning methods. It serves as a resource for researchers and practitioners aiming to explore and experiment with SSL techniques.
+This repository contains implementations of several Self-Supervised Learning (SSL) algorithms along with custom optimizers, learning rate schedulers, and loss functions. The main objective is to leverage large amounts of unlabeled data to learn useful representations for downstream tasks. The following SSL models and tasks have been implemented:
+
+## Algorithms
+- **SimCLR** (Simple Contrastive Learning of Representations)
+- **BYOL** (Bootstrap Your Own Latent)
+- **MoCo** (Momentum Contrast)
+- **PIRL** (Pretext-Invariant Representation Learning)
+- **Jigsaw Puzzle Solving**
+- **Rotation-Prediction**
+- **Context-Encoder**
+- **Context-Prediction**
+
+## Features
+- **Custom Optimizers**: 
+  - **LARS** (Layer-wise Adaptive Rate Scaling) optimizer implemented from scratch.
+- **Learning Rate Schedulers**:
+  - **StepDecay**
+  - **ExponentialDecay**
+  - **LinearDecay**
+  - **LinearDecay**
+  - **PiecewiseConstantDecay**
+  - **PolynomialDecay**
+- **Loss Functions**:
+  - **InfoNCE**
+  - **NCE**
+  - **BYOL Loss**
+  - **NTXent Loss**
 
 ## Table of Contents
 
