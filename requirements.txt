@@ -1,0 +1,18 @@
+# Core Libraries
+numpy==1.24.3
+tensorflow==2.13.0
+tensorflow-datasets==4.8.0
+scikit-learn==1.2.2
+matplotlib==3.7.1
+Pillow==9.4.0
+imutils==0.5.4
+tqdm==4.65.0
+
+# For Tensorboard
+tensorboard==2.13.0
+
+# For Argument Parsing
+argparse==1.4.0
+
+# For Data Preprocessing
+Pandas==2.0.0
